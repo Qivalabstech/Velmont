@@ -1,0 +1,43 @@
+{
+  "name": "velmont-store",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "create-owner": "tsx scripts/create-owner.ts",
+    "backup": "bash scripts/backup.sh",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@fontsource/big-shoulders-display": "5.2.5",
+    "@fontsource/hanken-grotesk": "5.2.6",
+    "@fontsource/ibm-plex-mono": "5.2.6",
+    "bcryptjs": "2.4.3",
+    "drizzle-orm": "0.45.3",
+    "next": "15.5.27",
+    "node-html-parser": "7.0.1",
+    "nodemailer": "6.10.1",
+    "pg": "8.22.0",
+    "react": "19.1.9",
+    "react-dom": "19.1.9",
+    "server-only": "0.0.1",
+    "sharp": "0.34.4",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "2.4.6",
+    "@types/node": "22.15.30",
+    "@types/nodemailer": "6.4.17",
+    "@types/pg": "8.21.0",
+    "@types/react": "19.1.16",
+    "@types/react-dom": "19.1.9",
+    "drizzle-kit": "0.31.9",
+    "tsx": "4.20.3",
+    "typescript": "5.9.2"
+  }
+}
