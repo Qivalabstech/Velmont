@@ -3,10 +3,10 @@ import { NextResponse, type NextRequest } from "next/server";
 type R = { from: string; to: string; permanent: boolean };
 let cache: { at: number; rows: R[] } = { at: 0, rows: [] };
 
-async function getRedirects(): Promise<R[]> {
+async function getRedirects(origin: string): Promise<R[]> {
   if (Date.now() - cache.at < 60_000) return cache.rows;
   try {
-    const base = process.env.INTERNAL_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+    const base = process.env.INTERNAL_URL || (process.env.VERCEL ? origin : `http://127.0.0.1:${process.env.PORT || 3000}`);
     const r = await fetch(`${base}/api/redirects`, { cache: "no-store" });
     if (r.ok) cache = { at: Date.now(), rows: await r.json() };
   } catch {
@@ -24,7 +24,7 @@ export async function middleware(req: NextRequest) {
   }
 
   if (!pathname.startsWith("/admin")) {
-    const rows = await getRedirects();
+    const rows = await getRedirects(req.nextUrl.origin);
     const hit = rows.find((r) => r.from === pathname || r.from === pathname.replace(/\/$/, ""));
     if (hit) {
       const to = hit.to.startsWith("http") ? hit.to : new URL(hit.to, req.url).toString();

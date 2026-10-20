@@ -11,12 +11,14 @@
     "create-owner": "tsx scripts/create-owner.ts",
     "backup": "bash scripts/backup.sh",
     "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "vercel-build": "tsx scripts/migrate.ts && tsx scripts/seed.ts && next build"
   },
   "dependencies": {
     "@fontsource/big-shoulders-display": "5.2.5",
     "@fontsource/hanken-grotesk": "5.2.6",
     "@fontsource/ibm-plex-mono": "5.2.6",
+    "@vercel/blob": "2.8.0",
     "bcryptjs": "2.4.3",
     "drizzle-orm": "0.45.3",
     "next": "15.5.27",

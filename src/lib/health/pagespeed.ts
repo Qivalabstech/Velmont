@@ -20,7 +20,7 @@ export async function runPageSpeed(strategy: Strategy, path = "/", trigger = "ma
   url.searchParams.set("strategy", strategy);
   for (const c of ["performance", "seo", "accessibility", "best-practices"]) url.searchParams.append("category", c);
   if (process.env.PAGESPEED_API_KEY) url.searchParams.set("key", process.env.PAGESPEED_API_KEY);
-  const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(90_000) });
+  const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(55_000) });
   const j = await r.json();
   if (!r.ok) throw new Error(`PageSpeed: ${j?.error?.message || r.statusText}`);
   const lh = j.lighthouseResult;

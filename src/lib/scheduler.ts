@@ -14,6 +14,7 @@ async function every5min() {
 }
 
 async function daily() {
+  try { await releaseExpiredOrders(); } catch (e) { await logError("scheduler.release", e); }
   const ago = (d: number) => new Date(Date.now() - d * 86400_000);
   try {
     await db.delete(uptimeChecks).where(lt(uptimeChecks.createdAt, ago(30)));

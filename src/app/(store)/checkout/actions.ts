@@ -5,7 +5,7 @@ import { db, carts, orders, addresses } from "@/db";
 import { getCartRecord, getCartLines, computeTotals } from "@/lib/cart";
 import { getCustomer, clientIp } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
-import { createOrder, clearCart, sendPlacedEmails, StockError } from "@/lib/orders";
+import { createOrder, clearCart, sendPlacedEmails, StockError, releaseExpiredOrders } from "@/lib/orders";
 import { createRazorpayOrder, paymentsMode, razorpayKeys } from "@/lib/razorpay";
 import { orderToken } from "@/lib/order-token";
 import { rateLimit } from "@/lib/rate-limit";
@@ -54,6 +54,7 @@ export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
     return { ok: false, error: i.message, field: String(i.path[0]) };
   }
   const d = parsed.data;
+  await releaseExpiredOrders().catch(() => {}); // frees stock held by abandoned online payments
   const cart = await getCartRecord(false);
   if (!cart) return { ok: false, error: "Your bag is empty." };
   const lines = await getCartLines(cart.id);

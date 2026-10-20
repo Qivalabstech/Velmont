@@ -8,7 +8,18 @@ import { paymentsMode } from "@/lib/razorpay";
 import { emailConfigured } from "@/lib/email";
 import { BACKUP_DIR, SITE_URL, UPLOAD_DIR } from "@/lib/env";
 
-export const internalBase = () => process.env.INTERNAL_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+export const internalBase = () =>
+  process.env.INTERNAL_URL || (process.env.VERCEL ? SITE_URL : `http://127.0.0.1:${process.env.PORT || 3000}`);
+
+/** Called by /api/health. Records at most one check every 4 minutes, so an external monitor fills the uptime strip. */
+export async function recordUptimeThrottled(dbMs: number) {
+  const g = globalThis as unknown as { __vmLastUp?: number };
+  if (g.__vmLastUp && Date.now() - g.__vmLastUp < 240_000) return;
+  g.__vmLastUp = Date.now();
+  const last = await db.query.uptimeChecks.findFirst({ orderBy: (u, { desc }) => [desc(u.createdAt)] });
+  if (last && Date.now() - last.createdAt.getTime() < 240_000) return;
+  await db.insert(uptimeChecks).values({ ok: true, latencyMs: dbMs, dbMs, note: "monitor" });
+}
 
 export async function recordUptime(note = "") {
   const t0 = Date.now();
@@ -60,7 +71,7 @@ export async function liveStatus() {
     paymentsMode(), lastBackup(),
   ]);
   let disk: { freeGb: number; totalGb: number } | null = null;
-  try {
+  if (!process.env.VERCEL) try {
     const s = await statfs(path.resolve(UPLOAD_DIR)).catch(() => statfs(process.cwd()));
     disk = { freeGb: (s.bavail * s.bsize) / 1e9, totalGb: (s.blocks * s.bsize) / 1e9 };
   } catch {}
@@ -80,6 +91,6 @@ export async function liveStatus() {
     buckets, errors24h: errs.n, stuckPending: stuck.n, visitors24h: visits24.n,
     payments: mode, email: emailConfigured(), https, sslExpires: ssl, backup,
     disk, memMb: Math.round(mem.rss / 1e6), uptimeSec: Math.round(process.uptime()), node: process.version,
-    lastCheck: checks[0]?.createdAt ?? null,
+    lastCheck: checks[0]?.createdAt ?? null, vercel: Boolean(process.env.VERCEL),
   };
 }

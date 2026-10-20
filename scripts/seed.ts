@@ -1,5 +1,6 @@
-// Seeds staff roles, the VELMONT catalogue, store pages and FAQs.
-// Safe to run more than once: existing rows are left alone.
+// Seeds staff roles, the owner account, the VELMONT catalogue, store pages and FAQs.
+// Safe to run on every deploy: roles and owner are ensured each time, but the catalogue, pages, FAQ and
+// sample code are added only once, so products you delete in the admin are not brought back.
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import bcrypt from "bcryptjs";
@@ -93,13 +94,23 @@ async function main() {
 
   const ownerEmail = (process.env.OWNER_EMAIL || "owner@velmont.in").toLowerCase();
   const existingOwner = await db.query.users.findFirst({ where: eq(s.users.isOwner, true) });
-  if (!existingOwner) {
+  const live = Boolean(process.env.VERCEL) || process.env.NODE_ENV === "production";
+  if (!existingOwner && live && !process.env.OWNER_PASSWORD) {
+    console.warn("No owner account yet. Set OWNER_EMAIL, OWNER_NAME and OWNER_PASSWORD, then deploy again.");
+  } else if (!existingOwner) {
     const pw = process.env.OWNER_PASSWORD || "Velmont@2026";
     await db.insert(s.users).values({
       email: ownerEmail, name: process.env.OWNER_NAME || "Store Owner",
       passwordHash: await bcrypt.hash(pw, 12), kind: "STAFF", isOwner: true,
     });
-    console.log(`Owner account created: ${ownerEmail} / ${pw}  (change this password after first sign-in)`);
+    console.log(live ? `Owner account created: ${ownerEmail}` : `Owner account created: ${ownerEmail} / ${pw}  (change this password after first sign-in)`);
+  }
+
+  const done = await db.query.settings.findFirst({ where: eq(s.settings.key, "seeded") });
+  if (done) {
+    console.log("Catalogue was seeded before; leaving products, pages and FAQ as they are.");
+    await pool.end();
+    return;
   }
 
   const cats = [
@@ -137,6 +148,7 @@ async function main() {
     code: "WELCOME10", description: "10% off the first order", type: "PERCENT", value: 10, maxDiscount: 50000, perCustomerLimit: 1,
   }).onConflictDoNothing();
 
+  await db.insert(s.settings).values({ key: "seeded", value: { at: new Date().toISOString() } }).onConflictDoNothing();
   console.log("Seed complete.");
   await pool.end();
 }

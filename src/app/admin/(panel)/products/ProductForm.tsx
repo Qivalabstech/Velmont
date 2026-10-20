@@ -14,6 +14,23 @@ type P = {
 };
 
 const STD = ["30", "32", "34", "36", "38", "40"];
+const UPLOAD_LIMIT = 4 * 1024 * 1024; // hosts like Vercel reject requests over 4.5 MB
+
+/** Shrinks a photo in the browser (max 2000 px, WebP) so uploads stay small and fast. */
+async function shrink(file: File): Promise<File> {
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+    c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise<Blob | null>((res) => c.toBlob(res, "image/webp", 0.88));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".webp", { type: "image/webp" });
+  } catch {
+    return file;
+  }
+}
 
 export function ProductForm({ p, categories, readOnly = false, seoOnly = false }: { p?: P; categories: { id: string; name: string }[]; readOnly?: boolean; seoOnly?: boolean }) {
   const [name, setName] = useState(p?.name || "");
@@ -42,11 +59,19 @@ export function ProductForm({ p, categories, readOnly = false, seoOnly = false }
     list.forEach((x) => dt.items.add(x.file));
     if (fileRef.current) fileRef.current.files = dt.files;
   };
-  const addFiles = (files: FileList | null) => {
+  const [shrinking, setShrinking] = useState(false);
+  const addFiles = async (files: FileList | null) => {
     if (!files) return;
-    const next = [...pending, ...Array.from(files).filter((f) => f.type.startsWith("image/")).map((file) => ({ file, url: URL.createObjectURL(file), alt: name }))];
-    setPending(next); syncFiles(next);
+    setShrinking(true);
+    const small = await Promise.all(Array.from(files).filter((f) => f.type.startsWith("image/")).map(shrink));
+    setShrinking(false);
+    setPending((cur) => {
+      const next = [...cur, ...small.map((file) => ({ file, url: URL.createObjectURL(file), alt: name }))];
+      syncFiles(next);
+      return next;
+    });
   };
+  const pendingBytes = pending.reduce((a, x) => a + x.file.size, 0);
   const move = (i: number, d: number) => setImgs((a) => { const b = [...a]; const j = i + d; if (j < 0 || j >= b.length) return a; [b[i], b[j]] = [b[j], b[i]]; return b; });
   const setVar = (i: number, patch: Partial<Var>) => setVars((a) => a.map((v, j) => (j === i ? { ...v, ...patch } : v)));
   const words = desc.trim().split(/\s+/).filter(Boolean).length;
@@ -102,10 +127,11 @@ export function ProductForm({ p, categories, readOnly = false, seoOnly = false }
               {!off && (
                 <label className="drop" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}>
                   <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-                  <span>＋ Add photos<br /><small>or drop them here</small></span>
+                  <span>{shrinking ? "Preparing photos…" : <>＋ Add photos<br /><small>or drop them here</small></>}</span>
                 </label>
               )}
             </div>
+            {pendingBytes > UPLOAD_LIMIT && <p className="alert warn" style={{ marginTop: 12 }}>These new photos add up to {(pendingBytes / 1048576).toFixed(1)} MB. Save fewer at a time (under 4 MB), then add the rest.</p>}
           </Card>
 
           <Card title="Sizes and stock" actions={!off && (
@@ -183,7 +209,7 @@ export function ProductForm({ p, categories, readOnly = false, seoOnly = false }
       </div>
       {!(readOnly && !seoOnly) && (
         <div className="savebar">
-          <Submit pendingText={pending.length ? "Uploading photos…" : "Saving…"}>{p ? "Save changes" : "Create product"}</Submit>
+          <Submit pendingText={pending.length ? "Uploading photos…" : "Saving…"} disabled={shrinking || pendingBytes > UPLOAD_LIMIT}>{p ? "Save changes" : "Create product"}</Submit>
         </div>
       )}
     </AForm>

@@ -7,6 +7,7 @@ import { STATUS_LABEL, STATUS_TONE, PAYMENT_LABEL, PAYMENT_TONE } from "@/lib/or
 import { formatDate } from "@/lib/utils";
 import { PageHead, Card, Pill, Pager } from "@/components/admin/ui";
 import { TABS, orderWhere, type OrderFilters } from "./query";
+import { releaseExpiredOrders } from "@/lib/orders";
 import { BulkBar } from "./BulkBar";
 
 export const metadata = { title: "Orders" };
@@ -15,6 +16,7 @@ const PER = 25;
 export default async function Orders({ searchParams }: { searchParams: Promise<OrderFilters> }) {
   const me = await requireStaff("orders.view");
   const f = await searchParams;
+  await releaseExpiredOrders().catch(() => {});
   const page = Math.max(1, Number(f.page) || 1);
   const where = orderWhere(f);
   const [list, [{ n }], counts] = await Promise.all([

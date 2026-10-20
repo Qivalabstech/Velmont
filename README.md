@@ -65,6 +65,37 @@ With `PAYMENTS_MOCK=true` and no Razorpay keys, "Pay online" opens a test window
 
 ---
 
+## Put it live on Vercel
+
+Vercel runs the store as serverless functions, so three things live outside it: the database (Neon), product photos (Vercel Blob) and scheduled jobs (Vercel Cron, set up by `vercel.json`).
+
+> **Plan:** Vercel's Hobby plan is for non-commercial use only. A store that takes payments needs the **Pro** plan. Hobby also allows cron jobs only once a day, which this store already respects.
+
+1. **Import the repo.** vercel.com → Add New → Project → pick the GitHub repo → keep the Next.js preset. Do not deploy yet if it asks; open the project settings first.
+2. **Database.** Project → Storage → Create Database → **Neon** (Postgres) → connect it to the project. Vercel adds `DATABASE_URL` automatically. Choose the region closest to India (Singapore / ap-southeast-1) and set the project's Functions region to the same place (Settings → Functions).
+3. **Photo storage.** Project → Storage → Create → **Blob** → connect it. Vercel adds `BLOB_READ_WRITE_TOKEN`.
+4. **Environment variables** (Settings → Environment Variables, for Production):
+   | Name | Value |
+   |---|---|
+   | `SITE_URL` | `https://yourdomain.in` (no trailing slash) |
+   | `AUTH_SECRET` | long random string (`openssl rand -hex 32`, or any 64 random letters and numbers) |
+   | `CRON_SECRET` | another long random string |
+   | `OWNER_EMAIL`, `OWNER_NAME`, `OWNER_PASSWORD` | your first admin login |
+   | `PAYMENTS_MOCK` | `false` |
+   | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | optional here; can be set in Admin → Settings |
+   | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | your email provider |
+5. **Deploy.** Deployments → Redeploy. The build runs `npm run vercel-build`, which creates the tables, adds the owner account and the 4 belts (only the first time), then builds the site.
+6. **Domain.** Settings → Domains → add `yourdomain.in` and `www.yourdomain.in`, then add the DNS records Vercel shows at your domain registrar. HTTPS is automatic. Update `SITE_URL` if it changed and redeploy.
+7. Continue with steps 4–10 of the server guide below (sign in at `/admin`, Razorpay keys and webhook, store details, health audit, Search Console, uptime monitor).
+
+**Notes for Vercel**
+- Add `https://yourdomain.in/api/health` to UptimeRobot (every 5 minutes). It alerts you if the site goes down and fills the uptime strip on the Site health page.
+- Unpaid online orders release their stock at the next checkout, when staff open Orders, or in the daily job.
+- Backups: Neon keeps restore points; check how many days your Neon plan keeps.
+- New product photos are shrunk in the browser before upload; one save can carry up to about 4 MB of photos.
+
+---
+
 ## Put it live on your own server
 
 **You need:** a VPS with Ubuntu 22.04 or 24.04, 2 GB RAM or more (Hostinger KVM 2, DigitalOcean, AWS Lightsail all work), and your domain.

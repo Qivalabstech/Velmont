@@ -12,6 +12,7 @@ import { AForm, Submit } from "@/components/admin/Form";
 import { runAudit, runSpeed, pingNow } from "./actions";
 
 export const metadata = { title: "Site health" };
+export const maxDuration = 60; // the audit and PageSpeed run inside this page's actions
 
 type Audit = { seo: Section; aeo: Section; geo: Section; pages: { path: string; status: number; ms: number; kb: number; title: string; words: number }[]; avgMs: number };
 type Speed = {
@@ -59,11 +60,13 @@ export default async function Health({ searchParams }: { searchParams: Promise<{
     { id: "pay", label: "Online payments (Razorpay)", status: live.payments === "live" ? "pass" : live.payments === "test" || live.payments === "mock" ? "warn" : "fail", value: { live: "Live keys", test: "Test keys: no real money", mock: "Simulated", off: "Not set up" }[live.payments], fix: live.payments !== "live" ? "Add live keys in Settings → Payments before launch." : undefined },
     { id: "mail", label: "Order emails", status: live.email ? "pass" : "warn", value: live.email ? "SMTP connected" : "Not set up", fix: !live.email ? "Customers will not get confirmations. Add SMTP details to the .env file." : undefined },
     { id: "ssl", label: "SSL certificate", status: !live.https ? "fail" : sslDays == null ? "warn" : sslDays > 14 ? "pass" : "fail", value: !live.https ? "Site is not on https" : sslDays == null ? "Could not read" : `Renews in ${sslDays} days`, fix: !live.https ? `SITE_URL is ${SITE_URL}. Point your domain to the server; Caddy issues the certificate automatically.` : undefined },
-    { id: "backup", label: "Database backup", status: backupDays == null ? "fail" : backupDays <= 1 ? "pass" : backupDays <= 7 ? "warn" : "fail", value: backupDays == null ? "None found" : `${backupDays === 0 ? "Today" : `${backupDays} days ago`}`, fix: backupDays == null || backupDays > 1 ? "The backup container saves one every night; check it is running (see README)." : undefined },
+    live.vercel
+      ? { id: "backup", label: "Database backup", status: "info", value: "Managed by your database host", fix: "Neon and Supabase keep restore points. Check your plan's history window in their dashboard." }
+      : { id: "backup", label: "Database backup", status: backupDays == null ? "fail" : backupDays <= 1 ? "pass" : backupDays <= 7 ? "warn" : "fail", value: backupDays == null ? "None found" : `${backupDays === 0 ? "Today" : `${backupDays} days ago`}`, fix: backupDays == null || backupDays > 1 ? "The backup container saves one every night; check it is running (see README)." : undefined },
     { id: "err", label: "Errors in the last 24 hours", status: live.errors24h === 0 ? "pass" : live.errors24h < 5 ? "warn" : "fail", value: String(live.errors24h), fix: live.errors24h ? "See Activity log → Errors." : undefined },
-    { id: "stuck", label: "Unpaid orders older than 3 hours", status: live.stuckPending ? "warn" : "pass", value: String(live.stuckPending), fix: live.stuckPending ? "These should auto-cancel; if they stay, the background scheduler is not running." : undefined },
+    { id: "stuck", label: "Unpaid orders older than 3 hours", status: live.stuckPending ? "warn" : "pass", value: String(live.stuckPending), fix: live.stuckPending ? (live.vercel ? "They are cancelled at the next checkout, when staff open Orders, or by the daily job." : "These should auto-cancel; if they stay, the background scheduler is not running.") : undefined },
     { id: "disk", label: "Disk space", status: !live.disk ? "info" : live.disk.freeGb > 5 ? "pass" : live.disk.freeGb > 1 ? "warn" : "fail", value: live.disk ? `${live.disk.freeGb.toFixed(1)} GB free of ${live.disk.totalGb.toFixed(0)} GB` : "—" },
-    { id: "mem", label: "App memory", status: live.memMb < 700 ? "pass" : "warn", value: `${live.memMb} MB · up ${Math.floor(live.uptimeSec / 3600)}h ${Math.floor((live.uptimeSec % 3600) / 60)}m · Node ${live.node}` },
+    { id: "mem", label: "App memory", status: live.vercel ? "info" : live.memMb < 700 ? "pass" : "warn", value: `${live.memMb} MB · up ${Math.floor(live.uptimeSec / 3600)}h ${Math.floor((live.uptimeSec % 3600) / 60)}m · Node ${live.node}` },
   ];
 
   const gauges: { k: string; title: string; n: number | null; sub: string }[] = [
@@ -75,7 +78,7 @@ export default async function Health({ searchParams }: { searchParams: Promise<{
 
   return (
     <div style={{ maxWidth: 1180 }}>
-      <PageHead title="Site health" sub={<>Live server status plus scheduled audits. The audit runs every night at 3 am; run it any time after changing products or pages. {auditRow && <>Last audit {formatDate(auditRow.createdAt, true)} ({auditRow.trigger}).</>}</>}
+      <PageHead title="Site health" sub={<>Live server status plus scheduled audits. The audit runs every night around 3 am; run it any time after changing products or pages. {auditRow && <>Last audit {formatDate(auditRow.createdAt, true)} ({auditRow.trigger}).</>}</>}
         actions={<>
           <AForm action={pingNow}><Submit className="btn sm" pendingText="Checking…">Check uptime now</Submit></AForm>
           <AForm action={runAudit}><Submit className="btn sm solid" pendingText="Auditing pages…">Run SEO / AEO / GEO audit</Submit></AForm>
@@ -159,7 +162,7 @@ export default async function Health({ searchParams }: { searchParams: Promise<{
         </div>
 
         <div className="stack">
-          <Card title="Live status" sub={live.lastCheck ? `Last automatic check ${timeAgo(live.lastCheck)}` : "Automatic checks run every 5 minutes"}>
+          <Card title="Live status" sub={live.lastCheck ? `Last check ${timeAgo(live.lastCheck)}` : live.vercel ? "Add an uptime monitor (below) to fill this strip" : "Automatic checks run every 5 minutes"}>
             <div className="uptime-strip" aria-label="Uptime over the last 24 hours, 30-minute blocks">
               {live.buckets.map((b, i) => <i key={i} className={b === "ok" ? "" : b} title={b === "none" ? "No data" : b === "ok" ? "Up" : "Problem"} />)}
             </div>
@@ -167,7 +170,7 @@ export default async function Health({ searchParams }: { searchParams: Promise<{
           </Card>
           <Card flush><Checks checks={liveChecks} /></Card>
           <Card title="External monitoring">
-            <p style={{ margin: 0, fontSize: ".86rem" }}>For alerts when the whole server is down, add <code>{SITE_URL}/api/health</code> to a free monitor such as UptimeRobot or Better Stack. It returns status 200 while the store and database respond.</p>
+            <p style={{ margin: 0, fontSize: ".86rem" }}>For alerts when the whole server is down, add <code>{SITE_URL}/api/health</code> to a free monitor such as UptimeRobot or Better Stack, checking every 5 minutes. It returns status 200 while the store and database respond{live.vercel ? ", and each check fills the uptime strip above" : ""}.</p>
           </Card>
         </div>
       </div>
