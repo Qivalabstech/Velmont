@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import * as s from "../src/db/schema";
+import { scriptDatabaseUrl } from "../src/db/url";
 
 async function main() {
   const [email, name, password] = process.argv.slice(2);
@@ -13,7 +14,7 @@ async function main() {
     process.exit(1);
   }
   if (password.length < 8) { console.error("Password must be at least 8 characters."); process.exit(1); }
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new Pool({ connectionString: scriptDatabaseUrl() });
   const db = drizzle(pool, { schema: s });
   const hash = await bcrypt.hash(password, 12);
   const existing = await db.query.users.findFirst({ where: eq(s.users.email, email.toLowerCase()) });

@@ -7,8 +7,9 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import * as s from "../src/db/schema";
 import { PRESET_ROLES } from "../src/lib/permissions";
+import { scriptDatabaseUrl } from "../src/db/url";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ connectionString: scriptDatabaseUrl() });
 const db = drizzle(pool, { schema: s });
 
 const SIZES = ["30", "32", "34", "36", "38", "40"];
