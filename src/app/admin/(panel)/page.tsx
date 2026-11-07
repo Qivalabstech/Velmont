@@ -32,6 +32,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const visitorsQ = (from: Date, to: Date) => db.select({ n: sql<number>`count(distinct ${visits.visitor})::int` }).from(visits)
     .where(and(gte(visits.createdAt, from), lt(visits.createdAt, to)));
 
+  const [upiDue] = await db.select({ v: sql<number>`coalesce(sum(${orders.total}),0)::int`, n: sql<number>`count(*)::int` })
+    .from(orders).where(eq(orders.paymentStatus, "VERIFYING"));
   const [[cur], [prev], [vCur], [vPrev], daily, toShip, codDue, top, low, recent, refs, devices, abandoned] = await Promise.all([
     agg(start, now), agg(prevStart, start), visitorsQ(start, now), visitorsQ(prevStart, start),
     db.select({ d: sql<string>`to_char(${orders.createdAt} at time zone 'Asia/Kolkata','YYYY-MM-DD')`, v: sql<number>`sum(${orders.total} - ${orders.refunded})::int`, n: sql<number>`count(*)::int` })
@@ -79,6 +81,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <Kpi label="Average order" value={inr(aov)} delta={dA.t} tone={dA.tone} />
         <Kpi label="Visitors" value={vCur.n} delta={`${conv.toFixed(1)}% bought · ${dV.t}`} tone={dV.tone} />
       </div>
+      {upiDue.n > 0 && (
+        <Link href="/admin/orders?tab=verify" className="alert warn" style={{ display: "block", marginBottom: 16, textDecoration: "none" }}>
+          <b>{upiDue.n} UPI payment{upiDue.n > 1 ? "s" : ""} to verify ({inr(upiDue.v)}).</b> Check your bank app, then confirm or reject each one. →
+        </Link>
+      )}
       <div className="kpis">
         <Link href="/admin/orders?tab=to-ship" className={`kpi${toShip[0].n ? " alert-k" : ""}`} style={{ textDecoration: "none" }}>
           <span className="l">To pack and ship</span><span className="v">{toShip[0].n}</span><span className="d">Open the queue →</span></Link>

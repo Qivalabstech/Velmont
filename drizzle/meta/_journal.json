@@ -15,6 +15,13 @@
       "when": 1792440568718,
       "tag": "0001_order_number_seq",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794086202323,
+      "tag": "0002_youpi",
+      "breakpoints": true
     }
   ]
 }

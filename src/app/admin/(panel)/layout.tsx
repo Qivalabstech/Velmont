@@ -9,7 +9,7 @@ export default async function Panel({ children }: { children: React.ReactNode })
   const me = await requireStaff();
   const s = await getSettings();
   const [[toShip], [pendingReviews], [unread]] = await Promise.all([
-    db.select({ n: sql<number>`count(*)::int` }).from(orders).where(sql`${orders.status} in ('PLACED','CONFIRMED','PACKED')`),
+    db.select({ n: sql<number>`count(*)::int` }).from(orders).where(sql`${orders.status} in ('PLACED','CONFIRMED','PACKED') or ${orders.paymentStatus} = 'VERIFYING'`),
     db.select({ n: sql<number>`count(*)::int` }).from(reviews).where(eq(reviews.status, "PENDING")),
     db.select({ n: sql<number>`count(*)::int` }).from(contactMessages).where(eq(contactMessages.handled, false)),
   ]);

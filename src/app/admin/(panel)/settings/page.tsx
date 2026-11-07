@@ -7,7 +7,8 @@ import { SITE_URL } from "@/lib/env";
 import { INDIAN_STATES } from "@/lib/utils";
 import { PageHead, Card, Pill } from "@/components/admin/ui";
 import { AForm, Submit } from "@/components/admin/Form";
-import { saveStore, saveShipping, savePayments, testRazorpay, saveNotifications } from "./actions";
+import { saveStore, saveShipping, savePayments, testRazorpay, saveNotifications, saveYoupi, testYoupi } from "./actions";
+import { youpiConfig, youpiMissing } from "@/lib/youpi";
 
 export const metadata = { title: "Settings" };
 
@@ -17,6 +18,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const s = await getSettings();
   const mode = await paymentsMode();
   const envKeys = !!process.env.RAZORPAY_KEY_ID;
+  const yp = await youpiConfig();
+  const ypMissing = youpiMissing(yp);
+  const ypEnv = !!(process.env.YOUPI_API_URL || process.env.YOUPI_MERCHANT_API_KEY);
+  const siteOrigin = new URL(SITE_URL).origin;
   const mask = (v: string) => (v ? `${v.slice(0, 4)}••••••${v.slice(-4)}` : "Not set");
   return (
     <div style={{ maxWidth: 980 }}>
@@ -91,7 +96,33 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </AForm>
             <AForm action={testRazorpay} style={{ marginTop: 12 }}><Submit className="btn sm" pendingText="Checking…">Test connection</Submit></AForm>
           </Card>
-          <Card title="Webhook setup">
+          <Card title="UPI direct to bank (YouPI)" sub={<>Status: <Pill tone={yp.enabled && !ypMissing.length ? "good" : yp.enabled ? "warn" : "neutral"}>{yp.enabled && !ypMissing.length ? "Offered at checkout" : yp.enabled ? `Needs ${ypMissing.join(", ")}` : "Off"}</Pill></>}>
+            <p className="hint-box" style={{ marginTop: 0 }}>Customers pay by UPI straight into your bank account through your own YouPI gateway server, with no gateway fee. YouPI is an experimental open-source project: keep amounts and volumes small, and always check your bank app before shipping. Bank alerts are not proof of payment on their own.</p>
+            {ypEnv && <p className="hint-box">Some YouPI values are set as server environment variables, which override the values below.</p>}
+            <AForm action={saveYoupi} className="fgrid">
+              <label className="check full"><input type="checkbox" name="youpiEnabled" defaultChecked={yp.enabled} />Offer UPI at checkout</label>
+              <div className="field full"><label htmlFor="yp-u">Gateway address</label><input id="yp-u" name="youpiApiUrl" className="input" defaultValue={yp.apiUrl} placeholder="https://pay.velmont.in" autoComplete="off" /><span className="hint">The public address of your YouPI server (its payment API / checkout portal).</span></div>
+              <div className="field"><label htmlFor="yp-m">Merchant ID</label><input id="yp-m" name="youpiMerchantId" className="input" defaultValue={yp.merchantId} autoComplete="off" /></div>
+              <div className="field"><label htmlFor="yp-k">Merchant API key <span className="muted">({mask(yp.apiKey)})</span></label><input id="yp-k" name="youpiApiKey" type="password" className="input" placeholder="Leave blank to keep" autoComplete="new-password" /></div>
+              <div className="field"><label htmlFor="yp-w">Webhook secret <span className="muted">({mask(yp.webhookSecret)})</span></label><input id="yp-w" name="youpiWebhookSecret" type="password" className="input" placeholder="Leave blank to keep" autoComplete="new-password" /></div>
+              <div className="field"><label htmlFor="yp-mode">How payments are matched</label>
+                <select id="yp-mode" name="youpiMode" className="select" defaultValue={yp.mode}>
+                  <option value="auto">Bank alerts (falls back to UTR when alerts are offline)</option>
+                  <option value="manual">Customer types the UTR</option>
+                </select></div>
+              <label className="check full"><input type="checkbox" name="youpiTrustBankAlerts" defaultChecked={yp.trustBankAlerts} />Confirm orders on a bank alert alone, without me checking the bank <span className="muted">(not recommended: alerts can be late, duplicated or spoofed)</span></label>
+              <label className="check full"><input type="checkbox" name="clearYoupi" />Remove saved YouPI details</label>
+              <div><Submit>Save UPI settings</Submit></div>
+            </AForm>
+            <AForm action={testYoupi} style={{ marginTop: 12 }}><Submit className="btn sm" pendingText="Checking…">Test connection</Submit></AForm>
+            <ol style={{ margin: "16px 0 0", paddingLeft: 18, display: "grid", gap: 6, fontSize: ".9rem" }}>
+              <li>On the YouPI server set <code>YOUPI_ALLOWED_RETURN_ORIGINS={siteOrigin}</code> so customers can come back to your store after paying.</li>
+              <li>In YouPI Merchant Admin set the webhook URL to <code>{SITE_URL}/api/payments/youpi</code> and copy its webhook secret above.</li>
+              <li>Add an active UPI receiving account (a business/current account is safest) and connect a bank-alert observer if you use “Bank alerts”.</li>
+              <li>Orders paid this way wait under <Link href="/admin/orders?tab=verify">Orders → UPI to verify</Link> until you confirm the money in your bank app.</li>
+            </ol>
+          </Card>
+          <Card title="Razorpay webhook setup">
             <ol style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6, fontSize: ".9rem" }}>
               <li>In the Razorpay Dashboard open Accounts &amp; Settings → Webhooks → Add new webhook.</li>
               <li>Webhook URL: <code>{SITE_URL}/api/payments/webhook</code></li>

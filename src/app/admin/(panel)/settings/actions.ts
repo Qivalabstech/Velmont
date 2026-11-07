@@ -2,6 +2,7 @@
 import { run, type ActionState } from "@/lib/admin-action";
 import { saveSetting, clearSettingsCache } from "@/lib/settings";
 import { pingRazorpay } from "@/lib/razorpay";
+import { pingYoupi, youpiConfig, youpiMissing } from "@/lib/youpi";
 import { str, num, bool, isEmail, INDIAN_STATES } from "@/lib/utils";
 import { toPaise } from "@/lib/money";
 
@@ -55,6 +56,39 @@ export async function testRazorpay(_: ActionState) {
     clearSettingsCache();
     try { await pingRazorpay(); return { ok: "Razorpay accepted the keys. Online payments are ready." }; }
     catch (e) { return { error: e instanceof Error ? e.message : "Razorpay rejected the keys." }; }
+  });
+}
+
+export async function saveYoupi(_: ActionState, fd: FormData) {
+  return run("settings.manage", async () => {
+    const apiUrl = str(fd, "youpiApiUrl").replace(/\/+$/, "");
+    if (apiUrl && !/^https:\/\//.test(apiUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(apiUrl))
+      return { error: "The gateway address must start with https:// (for example https://pay.velmont.in)." };
+    const mode = str(fd, "youpiMode") === "manual" ? "manual" : "auto";
+    const patch: Record<string, unknown> = {
+      youpiEnabled: bool(fd, "youpiEnabled"), youpiApiUrl: apiUrl, youpiMerchantId: str(fd, "youpiMerchantId"),
+      youpiMode: mode, youpiTrustBankAlerts: bool(fd, "youpiTrustBankAlerts"),
+    };
+    if (str(fd, "youpiApiKey")) patch.youpiApiKey = str(fd, "youpiApiKey");
+    if (str(fd, "youpiWebhookSecret")) patch.youpiWebhookSecret = str(fd, "youpiWebhookSecret");
+    if (bool(fd, "clearYoupi")) Object.assign(patch, { youpiEnabled: false, youpiApiUrl: "", youpiMerchantId: "", youpiApiKey: "", youpiWebhookSecret: "" });
+    await saveSetting("payments", patch);
+    const c = await youpiConfig();
+    const miss = youpiMissing(c);
+    const msg = !c.enabled ? "Saved. UPI is switched off at checkout."
+      : miss.length ? `Saved, but UPI stays hidden at checkout until you add the ${miss.join(", ")}.`
+      : "Saved. UPI is now offered at checkout. Press “Test connection” to check the gateway.";
+    return { ok: msg, log: { action: "update", entity: "settings", summary: `UPI (YouPI) ${c.enabled ? "on" : "off"}, mode ${mode}${c.trustBankAlerts ? ", auto-confirm on bank alert" : ""}` } };
+  });
+}
+
+export async function testYoupi(_: ActionState) {
+  return run("settings.manage", async () => {
+    clearSettingsCache();
+    const miss = youpiMissing(await youpiConfig());
+    if (miss.length) return { error: `Add the ${miss.join(", ")} first.` };
+    try { await pingYoupi(); return { ok: "The UPI gateway is reachable. Place a small test order to confirm the merchant key and webhook." }; }
+    catch (e) { return { error: e instanceof Error ? e.message : "The UPI gateway did not answer." }; }
   });
 }
 

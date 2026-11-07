@@ -6,10 +6,10 @@ import { db, orders } from "@/db";
 import { requireStaff } from "@/lib/auth";
 import { getOrderFull } from "@/lib/orders";
 import { inr } from "@/lib/money";
-import { STATUS_LABEL, STATUS_TONE, PAYMENT_LABEL, PAYMENT_TONE, NEXT_STATUSES, COURIERS } from "@/lib/order-status";
+import { STATUS_LABEL, STATUS_TONE, PAYMENT_LABEL, PAYMENT_TONE, NEXT_STATUSES, COURIERS, METHOD_LABEL } from "@/lib/order-status";
 import { formatDate } from "@/lib/utils";
 import { PageHead, Card, Pill } from "@/components/admin/ui";
-import { StatusForm, NoteForm, RefundForm, AddressForm, InternalNote, CodForm, TrackingForm } from "./Forms";
+import { StatusForm, NoteForm, RefundForm, AddressForm, InternalNote, CodForm, TrackingForm, UpiReviewForm } from "./Forms";
 
 export const metadata = { title: "Order" };
 
@@ -24,6 +24,8 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   const next = NEXT_STATUSES[o.status].filter((s) => s !== "CANCELLED" || canRefund);
   const refundable = o.total - o.refunded;
   const paidOnline = o.paymentMethod === "RAZORPAY" && (o.paymentStatus === "PAID" || o.paymentStatus === "PARTIALLY_REFUNDED");
+  // A UPI order staff can still settle by checking the bank: waiting, flagged, or auto-cancelled before the money showed up.
+  const upiReview = o.paymentMethod === "UPI" && (o.paymentStatus === "VERIFYING" || o.paymentStatus === "PENDING" || (o.status === "CANCELLED" && o.paymentStatus === "FAILED"));
   const waText = encodeURIComponent(`Hi ${a.name.split(" ")[0]}, this is VELMONT about your order ${o.number}.`);
 
   return (
@@ -91,11 +93,13 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
           </Card>
           <Card title="Payment">
             <dl className="kvx">
-              <dt>Method</dt><dd>{o.paymentMethod === "COD" ? "Cash on delivery" : "Razorpay (online)"}</dd>
+              <dt>Method</dt><dd>{METHOD_LABEL[o.paymentMethod]}{o.youpiMethod && <span className="sub"> · {o.youpiMethod === "MANUAL_UPI" ? "customer enters UTR" : "bank alerts"}</span>}</dd>
               <dt>Status</dt><dd><Pill tone={PAYMENT_TONE[o.paymentStatus]}>{PAYMENT_LABEL[o.paymentStatus]}</Pill></dd>
               {o.paidAt && <><dt>Paid</dt><dd>{formatDate(o.paidAt, true)}</dd></>}
               {o.razorpayPaymentId && <><dt>Payment ID</dt><dd><code>{o.razorpayPaymentId}</code></dd></>}
               {o.razorpayOrderId && <><dt>Razorpay order</dt><dd><code>{o.razorpayOrderId}</code></dd></>}
+              {o.upiUtr && <><dt>UTR</dt><dd><code>{o.upiUtr}</code></dd></>}
+              {o.youpiPaymentId && <><dt>YouPI payment</dt><dd><code style={{ wordBreak: "break-all" }}>{o.youpiPaymentId}</code></dd></>}
             </dl>
             {canManage && o.paymentStatus === "COD_PENDING" && o.status !== "CANCELLED" && <CodForm id={o.id} />}
             {o.refunds.length > 0 && (
@@ -105,7 +109,16 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               </div>
             )}
           </Card>
-          {canRefund && refundable > 0 && o.paymentStatus !== "PENDING" && o.paymentStatus !== "COD_PENDING" && (
+          {upiReview && canRefund && (
+            <Card title={o.paymentStatus === "VERIFYING" ? "Verify UPI payment" : o.status === "CANCELLED" ? "Late UPI payment?" : "UPI payment"}
+              sub={o.paymentStatus === "VERIFYING" ? "Stock stays held until you confirm or reject." : o.status === "CANCELLED" ? "If the money arrived after this order was cancelled, confirm it to restore the order." : "Not paid yet. Confirm only after you see the money in your bank."}>
+              <UpiReviewForm id={o.id} utr={o.upiUtr || ""} amount={inr(o.total)} />
+            </Card>
+          )}
+          {upiReview && !canRefund && o.paymentStatus === "VERIFYING" && (
+            <Card title="Verify UPI payment"><p className="hint-box" style={{ margin: 0 }}>Waiting for the owner or a manager to check the bank and confirm this payment.</p></Card>
+          )}
+          {canRefund && refundable > 0 && o.paymentStatus !== "PENDING" && o.paymentStatus !== "COD_PENDING" && o.paymentStatus !== "VERIFYING" && o.paymentStatus !== "FAILED" && (
             <Card title="Refund" sub={`Up to ${inr(refundable)}`}><RefundForm id={o.id} max={refundable / 100} online={paidOnline} /></Card>
           )}
           {canManage && <Card title="Staff note" sub="Only staff can see this."><InternalNote id={o.id} value={o.internalNote} /></Card>}

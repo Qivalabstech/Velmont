@@ -17,8 +17,8 @@ type Addr = { id: string; name: string; phone: string; line1: string; line2: str
 type RzpSuccess = { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string };
 declare global { interface Window { Razorpay?: new (o: object) => { open: () => void; on: (e: string, cb: (r: unknown) => void) => void } } }
 
-export function CheckoutForm({ lines, quote, paymentsMode, customer, saved, cod, prepaidPercent, delivery }: {
-  lines: CartLine[]; quote: { online: Totals; cod: Totals }; paymentsMode: "live" | "test" | "mock" | "off";
+export function CheckoutForm({ lines, quote, paymentsMode, upiReady, customer, saved, cod, prepaidPercent, delivery }: {
+  lines: CartLine[]; quote: { online: Totals; cod: Totals }; paymentsMode: "live" | "test" | "mock" | "off"; upiReady: boolean;
   customer: { name: string; email: string; phone: string } | null; saved: Addr[];
   cod: { enabled: boolean; fee: number; max: number }; prepaidPercent: number; delivery: string;
 }) {
@@ -28,7 +28,8 @@ export function CheckoutForm({ lines, quote, paymentsMode, customer, saved, cod,
   const def = saved.find((a) => a.isDefault) ?? saved[0];
   const [addrId, setAddrId] = useState<string>(def?.id ?? "new");
   const onlineOk = paymentsMode !== "off";
-  const [method, setMethod] = useState<"RAZORPAY" | "COD">(onlineOk ? "RAZORPAY" : "COD");
+  const [method, setMethod] = useState<"RAZORPAY" | "COD" | "UPI">(upiReady ? "UPI" : onlineOk ? "RAZORPAY" : "COD");
+  const [leaving, setLeaving] = useState(false);
   const [form, setForm] = useState({
     email: customer?.email ?? "", phone: customer?.phone ?? "", name: customer?.name ?? "",
     line1: "", line2: "", city: "", state: "", pincode: "", note: "", saveAddress: true,
@@ -78,6 +79,7 @@ export function CheckoutForm({ lines, quote, paymentsMode, customer, saved, cod,
         return;
       }
       if (r.kind === "done") { setCart(await fetchCart()); router.push(`/order/${r.number}?t=${r.token}`); return; }
+      if (r.kind === "redirect") { setLeaving(true); window.location.assign(r.url); return; }
       if (r.kind === "mock") { setMock(r); return; }
       setLastRzp(r);
       openRazorpay(r);
@@ -163,9 +165,16 @@ export function CheckoutForm({ lines, quote, paymentsMode, customer, saved, cod,
           <section className="panel">
             <h2 className="step-title"><i>3</i>Payment</h2>
             <div className="pay-opts" role="radiogroup" aria-label="Payment method">
+              {upiReady && (
+                <label className="pay-opt">
+                  <input type="radio" name="method" checked={method === "UPI"} onChange={() => setMethod("UPI")} />
+                  <span><b>UPI</b><small>GPay, PhonePe, Paytm or any UPI app{prepaidPercent > 0 ? ` · extra ${prepaidPercent}% off` : ""}</small></span>
+                  <span className="tnum">{inr(q.online.total)}</span>
+                </label>
+              )}
               <label className="pay-opt" aria-disabled={!onlineOk} style={!onlineOk ? { opacity: .5 } : undefined}>
                 <input type="radio" name="method" checked={method === "RAZORPAY"} disabled={!onlineOk} onChange={() => setMethod("RAZORPAY")} />
-                <span><b>Pay online</b><small>{onlineOk ? "UPI, cards, netbanking and wallets via Razorpay" : "Not available right now"}{prepaidPercent > 0 ? ` · extra ${prepaidPercent}% off` : ""}</small></span>
+                <span><b>{upiReady ? "Cards, netbanking and wallets" : "Pay online"}</b><small>{onlineOk ? (upiReady ? "Secure payment via Razorpay" : "UPI, cards, netbanking and wallets via Razorpay") : "Not available right now"}{prepaidPercent > 0 ? ` · extra ${prepaidPercent}% off` : ""}</small></span>
                 <span className="tnum">{inr(q.online.total)}</span>
               </label>
               {cod.enabled && (
@@ -200,10 +209,10 @@ export function CheckoutForm({ lines, quote, paymentsMode, customer, saved, cod,
           <div className="sum-row total"><span>Total</span><span>{inr(t.total)}</span></div>
           <div className="muted" style={{ fontSize: ".8rem" }}>Includes GST of {inr(t.tax)} · Delivery in {delivery}</div>
           {err && !err.field && <div className="alert bad" role="alert">{err.msg}</div>}
-          <button className="btn solid" type="submit" disabled={pending || verifying} style={{ minHeight: 52 }}>
-            {pending || verifying ? <><span className="spinner" /> {verifying ? "Confirming payment…" : "Placing order…"}</> : method === "COD" ? `Place order · ${inr(t.total)}` : `Pay ${inr(t.total)}`}
+          <button className="btn solid" type="submit" disabled={pending || verifying || leaving} style={{ minHeight: 52 }}>
+            {pending || verifying || leaving ? <><span className="spinner" /> {verifying ? "Confirming payment…" : leaving ? "Opening UPI…" : "Placing order…"}</> : method === "COD" ? `Place order · ${inr(t.total)}` : method === "UPI" ? `Pay ${inr(t.total)} by UPI` : `Pay ${inr(t.total)}`}
           </button>
-          <div className="secure"><LockIcon /> {method === "COD" ? "Pay in cash when the belt arrives" : "Secure payment by Razorpay"}</div>
+          <div className="secure"><LockIcon /> {method === "COD" ? "Pay in cash when the belt arrives" : method === "UPI" ? "Paid straight to our bank account by UPI" : "Secure payment by Razorpay"}</div>
           <p className="muted" style={{ fontSize: ".78rem", margin: 0 }}>By placing the order you agree to our <Link href="/pages/terms">terms</Link> and <Link href="/pages/returns">exchange policy</Link>.</p>
         </aside>
       </form>

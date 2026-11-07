@@ -2,7 +2,7 @@
 import { eq, inArray } from "drizzle-orm";
 import { db, orders, orderEvents } from "@/db";
 import { run, type ActionState } from "@/lib/admin-action";
-import { updateOrderStatus, refundOrder } from "@/lib/orders";
+import { updateOrderStatus, refundOrder, markUpiPaid, rejectUpiPayment } from "@/lib/orders";
 import { NEXT_STATUSES, STATUS_LABEL, COURIERS } from "@/lib/order-status";
 import type { OrderStatus } from "@/db/schema";
 import { str, bool, num, INDIAN_STATES } from "@/lib/utils";
@@ -103,5 +103,29 @@ export async function bulkStatus(_: ActionState, fd: FormData) {
       await updateOrderStatus({ orderId: o.id, status, actorName: me.name, notify: false }); n++;
     }
     return { ok: `${n} of ${ids.length} orders marked ${STATUS_LABEL[status].toLowerCase()}.`, log: { action: "bulk_status", entity: "order", summary: `${n} orders → ${STATUS_LABEL[status]}` } };
+  });
+}
+
+/** Staff found the UPI money in the bank app. */
+export async function confirmUpi(_: ActionState, fd: FormData) {
+  return run("orders.refund", async (me) => {
+    const id = str(fd, "id");
+    const utr = str(fd, "utr").replace(/\s+/g, "");
+    if (utr && !/^[A-Za-z0-9]{6,35}$/.test(utr)) return { error: "The UTR should be letters and numbers only (usually 12 digits)." };
+    if (!bool(fd, "checked")) return { error: "Tick the box to confirm you saw this payment in your bank account." };
+    const done = await markUpiPaid(id, { utr: utr || null, actorName: `${me.name} (checked bank)` });
+    const o = await db.query.orders.findFirst({ where: eq(orders.id, id) });
+    if (!done) return { error: `Order ${o?.number} is already marked paid.` };
+    return { ok: `Payment confirmed. ${o?.number} is now placed and the customer has been emailed.`, log: { action: "upi_confirm", entity: "order", id, summary: `${o?.number}: UPI payment confirmed${utr ? ` (UTR ${utr})` : ""}` }, revalidate: ["/admin/orders"] };
+  });
+}
+
+/** Staff checked the bank and the UPI money did not arrive. */
+export async function rejectUpi(_: ActionState, fd: FormData) {
+  return run("orders.refund", async (me) => {
+    const id = str(fd, "id");
+    await rejectUpiPayment(id, { reason: str(fd, "reason"), actorName: me.name, notify: bool(fd, "notify") });
+    const o = await db.query.orders.findFirst({ where: eq(orders.id, id) });
+    return { ok: `Marked as not received. ${o?.number} is cancelled and its stock is back.`, log: { action: "upi_reject", entity: "order", id, summary: `${o?.number}: UPI payment not received` }, revalidate: ["/admin/orders"] };
   });
 }

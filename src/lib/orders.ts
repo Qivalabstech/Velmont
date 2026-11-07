@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import {
   db, orders, orderItems, orderEvents, variants, coupons, cartItems, refunds,
-  type OrderStatus, type ShippingAddress,
+  type OrderStatus, type ShippingAddress, type PaymentMethod,
 } from "@/db";
 import type { CartLine, Totals } from "./cart";
 import { getSettings } from "./settings";
@@ -21,7 +21,7 @@ async function nextOrderNumber(tx: Tx) {
 }
 
 export async function createOrder(input: {
-  lines: CartLine[]; totals: Totals; method: "RAZORPAY" | "COD"; email: string; phone: string;
+  lines: CartLine[]; totals: Totals; method: PaymentMethod; email: string; phone: string;
   address: ShippingAddress; note: string; userId: string | null;
 }) {
   const { lines, totals, method } = input;
@@ -58,7 +58,7 @@ export async function createOrder(input: {
     })));
     await tx.insert(orderEvents).values({
       orderId: order.id, status: order.status,
-      message: isCod ? "Order placed with cash on delivery." : "Order created. Waiting for online payment.",
+      message: isCod ? "Order placed with cash on delivery." : method === "UPI" ? "Order created. Waiting for UPI payment." : "Order created. Waiting for online payment.",
       visibleToCustomer: isCod,
     });
     if (totals.couponCode)
@@ -87,10 +87,16 @@ export async function clearCart(cartId: string) {
   await db.delete(cartItems).where(eq(cartItems.cartId, cartId));
 }
 
-/** Marks an online order as paid. Safe to call twice (browser callback and webhook). */
-export async function markPaid(razorpayOrderId: string, paymentId: string, source: string) {
+type OrderRow = typeof orders.$inferSelect;
+
+/** Moves a locked, unpaid order to paid + placed. Returns null when it was already paid. */
+async function settle(
+  find: (tx: Tx) => Promise<OrderRow | undefined>,
+  patch: Partial<typeof orders.$inferInsert>,
+  actorName: string,
+) {
   const changed = await db.transaction(async (tx) => {
-    const [o] = await tx.select().from(orders).where(eq(orders.razorpayOrderId, razorpayOrderId)).for("update");
+    const o = await find(tx);
     if (!o) throw new Error("Order not found for this payment.");
     if (o.paymentStatus === "PAID" || o.paymentStatus === "REFUNDED" || o.paymentStatus === "PARTIALLY_REFUNDED") return null;
 
@@ -99,15 +105,15 @@ export async function markPaid(razorpayOrderId: string, paymentId: string, sourc
       const its = await tx.select().from(orderItems).where(eq(orderItems.orderId, o.id));
       for (const i of its) if (i.variantId)
         await tx.update(variants).set({ stock: sql`${variants.stock} - ${i.qty}` }).where(eq(variants.id, i.variantId));
+      if (o.couponCode)
+        await tx.update(coupons).set({ usedCount: sql`${coupons.usedCount} + 1` }).where(eq(coupons.code, o.couponCode));
     }
     const now = new Date();
     await tx.update(orders).set({
-      paymentStatus: "PAID", status: "PLACED", razorpayPaymentId: paymentId, paidAt: now, placedAt: o.placedAt ?? now,
+      ...patch, paymentStatus: "PAID", status: "PLACED", paidAt: now, placedAt: o.placedAt ?? now,
       stockReleased: false, cancelledAt: null,
     }).where(eq(orders.id, o.id));
-    await tx.insert(orderEvents).values({
-      orderId: o.id, status: "PLACED", message: "Payment received. Order placed.", actorName: `Razorpay (${source})`,
-    });
+    await tx.insert(orderEvents).values({ orderId: o.id, status: "PLACED", message: "Payment received. Order placed.", actorName });
     if (o.stockReleased)
       await tx.insert(orderEvents).values({
         orderId: o.id, message: "Payment came in after the stock hold expired. Check stock before packing.",
@@ -117,6 +123,76 @@ export async function markPaid(razorpayOrderId: string, paymentId: string, sourc
   });
   if (changed) await sendPlacedEmails(changed);
   return changed;
+}
+
+/** Marks a Razorpay order as paid. Safe to call twice (browser callback and webhook). */
+export async function markPaid(razorpayOrderId: string, paymentId: string, source: string) {
+  return settle(
+    async (tx) => (await tx.select().from(orders).where(eq(orders.razorpayOrderId, razorpayOrderId)).for("update"))[0],
+    { razorpayPaymentId: paymentId }, `Razorpay (${source})`,
+  );
+}
+
+/** Marks a direct-UPI (YouPI) order as paid, by staff after checking the bank or by a reconciled statement. */
+export async function markUpiPaid(orderId: string, input: { utr?: string | null; youpiPaymentId?: string | null; actorName: string }) {
+  return settle(
+    async (tx) => {
+      const [o] = await tx.select().from(orders).where(eq(orders.id, orderId)).for("update");
+      if (o && o.paymentMethod !== "UPI") throw new Error("This order was not paid by direct UPI.");
+      return o;
+    },
+    {
+      ...(input.utr ? { upiUtr: input.utr } : {}),
+      ...(input.youpiPaymentId ? { youpiPaymentId: input.youpiPaymentId } : {}),
+    },
+    input.actorName,
+  );
+}
+
+/**
+ * A UPI payment is claimed (customer entered a UTR) or seen in a bank alert, but not yet confirmed.
+ * Keeps the stock held and flags the order for staff. Returns true the first time.
+ */
+export async function markUpiVerifying(orderId: string, input: { utr?: string | null; youpiPaymentId?: string | null; message: string; actorName: string }) {
+  return db.transaction(async (tx) => {
+    const [o] = await tx.select().from(orders).where(eq(orders.id, orderId)).for("update");
+    if (!o || o.paymentMethod !== "UPI") return false;
+    if (o.paymentStatus !== "PENDING" && o.paymentStatus !== "FAILED" && o.paymentStatus !== "VERIFYING") return false;
+    const first = o.paymentStatus !== "VERIFYING";
+    const sameUtr = !input.utr || input.utr === o.upiUtr;
+    if (!first && sameUtr) return false;
+    await tx.update(orders).set({
+      paymentStatus: "VERIFYING",
+      ...(input.utr ? { upiUtr: input.utr } : {}),
+      ...(input.youpiPaymentId ? { youpiPaymentId: input.youpiPaymentId } : {}),
+    }).where(eq(orders.id, o.id));
+    await tx.insert(orderEvents).values({ orderId: o.id, message: input.message, actorName: input.actorName, visibleToCustomer: false });
+    if (first)
+      await tx.insert(orderEvents).values({
+        orderId: o.id, message: "We have your UPI payment details and are confirming them with the bank.", actorName: "System",
+      });
+    return true;
+  });
+}
+
+/** Staff checked the bank and the UPI money is not there. Cancels the order and frees the stock. */
+export async function rejectUpiPayment(orderId: string, input: { reason: string; actorName: string; notify: boolean }) {
+  const o = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
+  if (!o || o.paymentMethod !== "UPI") throw new Error("This order was not paid by direct UPI.");
+  if (o.paymentStatus === "PAID" || o.paymentStatus === "REFUNDED" || o.paymentStatus === "PARTIALLY_REFUNDED")
+    throw new Error("This order is already marked paid. Use a refund instead.");
+  const msg = `UPI payment not received${input.reason ? `: ${input.reason}` : "."}`;
+  if (o.status === "PENDING_PAYMENT") {
+    await updateOrderStatus({ orderId, status: "CANCELLED", actorName: input.actorName, note: msg, notify: input.notify, restockOnCancel: true });
+  } else {
+    await db.insert(orderEvents).values({ orderId, message: msg, actorName: input.actorName, visibleToCustomer: false });
+  }
+  await db.update(orders).set({ paymentStatus: "FAILED" }).where(eq(orders.id, orderId));
+}
+
+/** Logs a note against an order without changing it (e.g. a UPI attempt expired). */
+export async function addOrderEvent(orderId: string, message: string, actorName: string) {
+  await db.insert(orderEvents).values({ orderId, message: message.slice(0, 500), actorName, visibleToCustomer: false });
 }
 
 export async function markPaymentFailed(razorpayOrderId: string, reason: string) {
@@ -138,7 +214,7 @@ export async function releaseExpiredOrders() {
   const s = await getSettings();
   const cutoff = new Date(Date.now() - s.payments.pendingPaymentMinutes * 60_000);
   const stale = await db.select({ id: orders.id, couponCode: orders.couponCode }).from(orders).where(and(
-    eq(orders.status, "PENDING_PAYMENT"), eq(orders.stockReleased, false), lt(orders.createdAt, cutoff),
+    eq(orders.status, "PENDING_PAYMENT"), eq(orders.paymentStatus, "PENDING"), eq(orders.stockReleased, false), lt(orders.createdAt, cutoff),
   ));
   for (const o of stale) {
     await db.transaction(async (tx) => {

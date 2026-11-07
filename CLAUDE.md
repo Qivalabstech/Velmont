@@ -17,4 +17,5 @@ Self-hosted e-commerce store for hand-tooled leather belts. Next.js 15 App Route
 - Store settings live in the `settings` table, typed with defaults in `src/lib/settings.ts` (`getSettings`, `saveSetting`).
 - Order state changes go through `src/lib/orders.ts` (createOrder, markPaid, updateOrderStatus, refundOrder, releaseExpiredOrders); allowed transitions are in `src/lib/order-status.ts`.
 - Styling: plain CSS with tokens in `src/styles/base.css`; storefront `store.css`, admin `admin.css`. Display font Big Shoulders Display, body Hanken Grotesk, mono IBM Plex Mono. Accent is verdigris `--verdigris`.
+- Payments: Razorpay (`src/lib/razorpay.ts`), COD, and direct UPI via a self-hosted YouPI gateway (`src/lib/youpi.ts` client + signature check, `youpi-start.ts` opens a session, `youpi-orders.ts` applies outcomes; webhook `src/app/api/payments/youpi`). UPI orders sit at payment status VERIFYING until staff confirm in the admin; only a RECONCILED event marks them paid automatically.
 - Health checks: `src/lib/health/` (live.ts, audit.ts, pagespeed.ts). Background jobs: `src/lib/scheduler.ts` started from `src/instrumentation-node.ts`.

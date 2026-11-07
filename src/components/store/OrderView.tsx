@@ -1,12 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { inr } from "@/lib/money";
-import { STATUS_LABEL, TRACK_STEPS, PAYMENT_LABEL } from "@/lib/order-status";
+import { STATUS_LABEL, TRACK_STEPS, PAYMENT_LABEL, METHOD_LABEL } from "@/lib/order-status";
 import { formatDate } from "@/lib/utils";
-import type { OrderStatus, PaymentStatus, ShippingAddress } from "@/db/schema";
+import type { OrderStatus, PaymentStatus, PaymentMethod, ShippingAddress } from "@/db/schema";
 
 type O = {
-  number: string; status: OrderStatus; paymentStatus: PaymentStatus; paymentMethod: "RAZORPAY" | "COD";
+  number: string; status: OrderStatus; paymentStatus: PaymentStatus; paymentMethod: PaymentMethod;
   subtotal: number; discount: number; shipping: number; codFee: number; tax: number; total: number; refunded: number;
   couponCode: string | null; shippingAddress: ShippingAddress; createdAt: Date; placedAt: Date | null;
   courier: string | null; awb: string | null; trackingUrl: string | null;
@@ -25,7 +25,9 @@ export function OrderView({ o, invoiceHref }: { o: O; invoiceHref?: string }) {
         <h2>Status</h2>
         {off ? (
           <div className={`alert ${o.status === "CANCELLED" ? "bad" : "warn"}`} style={{ marginBottom: 16 }}>
-            {o.status === "PENDING_PAYMENT" ? "We have not received payment for this order yet." : STATUS_LABEL[o.status]}
+            {o.status === "PENDING_PAYMENT"
+              ? o.paymentStatus === "VERIFYING" ? "We are confirming your UPI payment with the bank." : "We have not received payment for this order yet."
+              : STATUS_LABEL[o.status]}
           </div>
         ) : (
           <ol className="timeline">
@@ -72,7 +74,7 @@ export function OrderView({ o, invoiceHref }: { o: O; invoiceHref?: string }) {
         </div>
         <dl className="kv">
           <dt>Placed</dt><dd>{formatDate(o.placedAt ?? o.createdAt, true)}</dd>
-          <dt>Payment</dt><dd>{o.paymentMethod === "COD" ? "Cash on delivery" : "Online (Razorpay)"} · {PAYMENT_LABEL[o.paymentStatus]}</dd>
+          <dt>Payment</dt><dd>{METHOD_LABEL[o.paymentMethod]} · {PAYMENT_LABEL[o.paymentStatus]}</dd>
           <dt>Ship to</dt><dd>{a.name}<br />{a.line1}{a.line2 ? `, ${a.line2}` : ""}<br />{a.city}, {a.state} {a.pincode}<br />{a.phone}</dd>
         </dl>
         {invoiceHref && o.status !== "PENDING_PAYMENT" && <a className="btn sm" href={invoiceHref} target="_blank" rel="noopener">View invoice</a>}

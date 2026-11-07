@@ -4,7 +4,8 @@ import { db, emailLogs } from "@/db";
 import { SITE_URL } from "./env";
 import { inr } from "./money";
 import { getSettings } from "./settings";
-import { STATUS_LABEL } from "./order-status";
+import { STATUS_LABEL, METHOD_LABEL } from "./order-status";
+import type { PaymentMethod } from "@/db/schema";
 
 let transport: nodemailer.Transporter | null = null;
 export const emailConfigured = () => Boolean(process.env.SMTP_HOST);
@@ -98,9 +99,21 @@ export async function mailNewOrderAlert(o: MailOrder) {
   const to = s.notifications.orderAlertEmail;
   if (!to) return;
   const html = await layout(`New order ${o.number}`,
-    `<p>${o.items.length} item(s), ${inr(o.total)}, paid by ${o.paymentMethod === "COD" ? "cash on delivery" : "Razorpay"}.</p>${itemsTable(o)}
+    `<p>${o.items.length} item(s), ${inr(o.total)}, paid by ${METHOD_LABEL[o.paymentMethod as PaymentMethod]?.toLowerCase() ?? o.paymentMethod}.</p>${itemsTable(o)}
 ${button(`${SITE_URL}/admin/orders`, "Open in admin")}`);
   await sendMail(to, `New order ${o.number} · ${inr(o.total)}`, "admin_new_order", html);
+}
+
+/** Tells the owner a UPI payment needs checking in the bank app before the order can ship. */
+export async function mailUpiToVerify(o: MailOrder & { id: string; upiUtr?: string | null }) {
+  const s = await getSettings();
+  const to = s.notifications.orderAlertEmail;
+  if (!to) return;
+  const html = await layout(`Check UPI payment for ${o.number}`,
+    `<p>A UPI payment of <b>${inr(o.total)}</b> for order ${esc(o.number)} needs checking${o.upiUtr ? ` (UTR <b>${esc(o.upiUtr)}</b>)` : ""}.</p>
+<p>Open your bank app, find this amount${o.upiUtr ? " and UTR" : ""}, then confirm or reject it on the order page. Stock stays held until you do.</p>
+${button(`${SITE_URL}/admin/orders/${o.id}`, "Open the order")}`);
+  await sendMail(to, `Verify UPI ${inr(o.total)} · ${o.number}`, "admin_upi_verify", html);
 }
 
 export async function mailPasswordReset(to: string, name: string, link: string, staff = false) {

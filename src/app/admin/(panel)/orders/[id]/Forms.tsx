@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { AForm, Submit, ConfirmSubmit } from "@/components/admin/Form";
-import { changeStatus, addNote, refund, editAddress, saveInternalNote, markCodCollected, updateTracking } from "../actions";
+import { changeStatus, addNote, refund, editAddress, saveInternalNote, markCodCollected, updateTracking, confirmUpi, rejectUpi } from "../actions";
 import { STATUS_LABEL } from "@/lib/order-status";
 import { INDIAN_STATES } from "@/lib/utils";
 import type { OrderStatus, ShippingAddress } from "@/db/schema";
@@ -113,5 +113,35 @@ export function CodForm({ id }: { id: string }) {
       <input type="hidden" name="id" value={id} />
       <Submit className="btn sm">Mark cash collected</Submit>
     </AForm>
+  );
+}
+
+export function UpiReviewForm({ id, utr, amount }: { id: string; utr: string; amount: string }) {
+  const [reject, setReject] = useState(false);
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <AForm action={confirmUpi} className="fgrid">
+        <input type="hidden" name="id" value={id} />
+        <div className="field full"><label htmlFor="u-utr">UTR / UPI reference</label>
+          <input id="u-utr" name="utr" className="input" defaultValue={utr} placeholder="12-digit number from your bank app" autoComplete="off" />
+          <span className="hint">Open your bank app, find a credit of {amount} with this reference, then confirm.</span></div>
+        <label className="check full"><input type="checkbox" name="checked" />I can see {amount} from this payment in our bank account</label>
+        <div className="full"><ConfirmSubmit className="btn solid" confirmText="Click again to confirm payment">Payment received</ConfirmSubmit></div>
+      </AForm>
+      {!reject ? (
+        <button type="button" className="btn sm" style={{ justifySelf: "start", color: "var(--bad)" }} onClick={() => setReject(true)}>Payment not received…</button>
+      ) : (
+        <AForm action={rejectUpi} className="fgrid" style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+          <input type="hidden" name="id" value={id} />
+          <div className="field full"><label htmlFor="u-why">Reason <span className="muted">(sent to the customer if notified)</span></label>
+            <input id="u-why" name="reason" className="input" defaultValue="We could not find this payment in our bank account. If money left your account, reply to this email with a screenshot." /></div>
+          <label className="check full"><input type="checkbox" name="notify" defaultChecked />Email the customer</label>
+          <div className="full" style={{ display: "flex", gap: 8 }}>
+            <ConfirmSubmit className="btn danger" confirmText="Click again to cancel the order">Not received: cancel order</ConfirmSubmit>
+            <button type="button" className="btn sm" onClick={() => setReject(false)}>Back</button>
+          </div>
+        </AForm>
+      )}
+    </div>
   );
 }

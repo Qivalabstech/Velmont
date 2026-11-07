@@ -1,4 +1,4 @@
-import type { OrderStatus, PaymentStatus } from "@/db/schema";
+import type { OrderStatus, PaymentStatus, PaymentMethod } from "@/db/schema";
 
 export const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING_PAYMENT: "Awaiting payment",
@@ -21,6 +21,13 @@ export const PAYMENT_LABEL: Record<PaymentStatus, string> = {
   COD_COLLECTED: "COD · collected",
   REFUNDED: "Refunded",
   PARTIALLY_REFUNDED: "Partly refunded",
+  VERIFYING: "UPI · to verify",
+};
+
+export const METHOD_LABEL: Record<PaymentMethod, string> = {
+  RAZORPAY: "Online (Razorpay)",
+  COD: "Cash on delivery",
+  UPI: "UPI (direct to bank)",
 };
 
 /** The happy path a customer sees on the tracking page. */
@@ -47,7 +54,7 @@ export const STATUS_TONE: Record<OrderStatus, Tone> = {
 };
 export const PAYMENT_TONE: Record<PaymentStatus, Tone> = {
   PENDING: "warn", PAID: "good", FAILED: "bad", COD_PENDING: "warn", COD_COLLECTED: "good",
-  REFUNDED: "neutral", PARTIALLY_REFUNDED: "neutral",
+  REFUNDED: "neutral", PARTIALLY_REFUNDED: "neutral", VERIFYING: "warn",
 };
 
 export const COURIERS: { name: string; url: string }[] = [

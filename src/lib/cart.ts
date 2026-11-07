@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { and, eq, sql } from "drizzle-orm";
-import { db, carts, cartItems, coupons, orders } from "@/db";
+import { db, carts, cartItems, coupons, orders, type PaymentMethod } from "@/db";
 import { newToken } from "./auth";
 import { getSettings, type Settings } from "./settings";
 import { IS_PROD } from "./env";
@@ -76,7 +76,7 @@ export async function validateCoupon(code: string, subtotal: number, email?: str
 }
 
 export async function computeTotals(
-  lines: CartLine[], opts: { couponCode?: string | null; method?: "RAZORPAY" | "COD"; email?: string | null; settings?: Settings },
+  lines: CartLine[], opts: { couponCode?: string | null; method?: PaymentMethod; email?: string | null; settings?: Settings },
 ): Promise<Totals> {
   const s = opts.settings ?? (await getSettings());
   const live = lines.filter((l) => l.available);
@@ -95,7 +95,7 @@ export async function computeTotals(
     } else couponError = error;
   }
   const afterCoupon = subtotal - couponDiscount;
-  const prepaidDiscount = opts.method === "RAZORPAY" && s.payments.prepaidDiscountPercent > 0
+  const prepaidDiscount = (opts.method === "RAZORPAY" || opts.method === "UPI") && s.payments.prepaidDiscountPercent > 0
     ? Math.floor((afterCoupon * s.payments.prepaidDiscountPercent) / 100) : 0;
   const goods = afterCoupon - prepaidDiscount;
   const shipping = subtotal === 0 || freeShip || s.shipping.freeAbove === 0 || goods >= s.shipping.freeAbove ? 0 : s.shipping.flatRate;

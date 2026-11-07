@@ -22,8 +22,12 @@ export const orderStatus = pgEnum("order_status", [
 ]);
 export const paymentStatus = pgEnum("payment_status", [
   "PENDING", "PAID", "FAILED", "COD_PENDING", "COD_COLLECTED", "REFUNDED", "PARTIALLY_REFUNDED",
+  // UPI via YouPI: the customer or a bank alert says it is paid; staff must check the bank before shipping.
+  "VERIFYING",
 ]);
-export const paymentMethod = pgEnum("payment_method", ["RAZORPAY", "COD"]);
+// UPI = direct UPI to the store's bank account through a self-hosted YouPI gateway.
+export const paymentMethod = pgEnum("payment_method", ["RAZORPAY", "COD", "UPI"]);
+export type PaymentMethod = (typeof paymentMethod.enumValues)[number];
 export const reviewStatus = pgEnum("review_status", ["PENDING", "APPROVED", "REJECTED"]);
 
 export type OrderStatus = (typeof orderStatus.enumValues)[number];
@@ -202,6 +206,9 @@ export const orders = pgTable("orders", {
   internalNote: text("internal_note").notNull().default(""),
   razorpayOrderId: text("razorpay_order_id").unique(),
   razorpayPaymentId: text("razorpay_payment_id"),
+  youpiPaymentId: text("youpi_payment_id"),
+  youpiMethod: text("youpi_method"), // UPI (bank alerts) or MANUAL_UPI (customer enters UTR)
+  upiUtr: text("upi_utr"),
   courier: text("courier"),
   awb: text("awb"),
   trackingUrl: text("tracking_url"),
@@ -377,6 +384,15 @@ export const errorLogs = pgTable("error_logs", {
   path: text("path").notNull().default(""),
   createdAt: createdAt(),
 }, (t) => [index("error_created_idx").on(t.createdAt)]);
+
+/** Payment gateway webhook deliveries already processed, so a retried delivery is not applied twice. */
+export const gatewayDeliveries = pgTable("gateway_deliveries", {
+  id: text("id").primaryKey(), // provider:deliveryId
+  provider: text("provider").notNull(),
+  event: text("event").notNull(),
+  orderNumber: text("order_number"),
+  createdAt: createdAt(),
+});
 
 export const healthRuns = pgTable("health_runs", {
   id: id(),

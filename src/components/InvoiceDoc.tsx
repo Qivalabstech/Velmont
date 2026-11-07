@@ -2,7 +2,8 @@ import { inr } from "@/lib/money";
 import { invoiceLines } from "@/lib/invoice";
 import { formatDate } from "@/lib/utils";
 import type { Settings } from "@/lib/settings";
-import type { ShippingAddress } from "@/db/schema";
+import type { ShippingAddress, PaymentMethod } from "@/db/schema";
+import { METHOD_LABEL } from "@/lib/order-status";
 import { PrintButton } from "./PrintButton";
 
 type O = {
@@ -45,7 +46,7 @@ export function InvoiceDoc({ o, s }: { o: O; s: Settings }) {
       </div>
       <div className="row" style={{ marginTop: 22 }}>
         <div><div className="muted">Bill and ship to</div><b>{a.name}</b><br />{a.line1}{a.line2 ? `, ${a.line2}` : ""}<br />{a.city}, {a.state} {a.pincode}<br />{o.phone} · {o.email}</div>
-        <div style={{ textAlign: "right" }}><div className="muted">Place of supply</div>{a.state}<div className="muted" style={{ marginTop: 8 }}>Payment</div>{o.paymentMethod === "COD" ? "Cash on delivery" : "Online (Razorpay)"}</div>
+        <div style={{ textAlign: "right" }}><div className="muted">Place of supply</div>{a.state}<div className="muted" style={{ marginTop: 8 }}>Payment</div>{METHOD_LABEL[o.paymentMethod as PaymentMethod] ?? o.paymentMethod}</div>
       </div>
       <div className="scroll">
         <table>

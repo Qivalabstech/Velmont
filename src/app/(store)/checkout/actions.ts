@@ -7,6 +7,8 @@ import { getCustomer, clientIp } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { createOrder, clearCart, sendPlacedEmails, StockError, releaseExpiredOrders } from "@/lib/orders";
 import { createRazorpayOrder, paymentsMode, razorpayKeys } from "@/lib/razorpay";
+import { youpiReady } from "@/lib/youpi";
+import { startUpiPayment } from "@/lib/youpi-start";
 import { orderToken } from "@/lib/order-token";
 import { rateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/audit";
@@ -21,7 +23,7 @@ const Input = z.object({
   city: z.string().trim().min(2, "Enter the city.").max(60),
   state: z.string().refine((s) => INDIAN_STATES.includes(s), "Choose a state."),
   pincode: z.string().trim().regex(/^[1-9]\d{5}$/, "Enter a 6-digit pincode."),
-  method: z.enum(["RAZORPAY", "COD"]),
+  method: z.enum(["RAZORPAY", "COD", "UPI"]),
   note: z.string().max(500).default(""),
   saveAddress: z.boolean().default(false),
 });
@@ -43,6 +45,7 @@ export type PlaceResult =
   | { ok: true; kind: "done"; number: string; token: string }
   | { ok: true; kind: "razorpay"; key: string; rzpOrderId: string; amount: number; number: string; name: string; email: string; phone: string; storeName: string }
   | { ok: true; kind: "mock"; rzpOrderId: string; amount: number; number: string }
+  | { ok: true; kind: "redirect"; url: string; number: string }
   | { ok: false; error: string; field?: string };
 
 export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
@@ -72,6 +75,7 @@ export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
   }
   const mode = await paymentsMode();
   if (d.method === "RAZORPAY" && mode === "off") return { ok: false, error: "Online payment is not set up yet. Choose cash on delivery or contact us." };
+  if (d.method === "UPI" && !(await youpiReady())) return { ok: false, error: "UPI payment is not available right now. Choose another way to pay." };
 
   const address = { name: d.name, phone: d.phone, line1: d.line1, line2: d.line2, city: d.city, state: d.state, pincode: d.pincode };
   let order;
@@ -97,6 +101,16 @@ export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
     await db.update(carts).set({ couponCode: null }).where(eq(carts.id, cart.id));
     await sendPlacedEmails(order.id);
     return { ok: true, kind: "done", number: order.number, token: orderToken(order.number) };
+  }
+
+  if (d.method === "UPI") {
+    // The order is saved and its stock held; the bag is emptied so a second tap cannot create a duplicate order.
+    // If the gateway is slow, the customer can retry from the order page.
+    await clearCart(cart.id);
+    await db.update(carts).set({ couponCode: null }).where(eq(carts.id, cart.id));
+    const r = await startUpiPayment(order.id);
+    if (!r.ok) return { ok: true, kind: "redirect", url: `/order/${order.number}?t=${orderToken(order.number)}&upi=retry`, number: order.number };
+    return { ok: true, kind: "redirect", url: r.url, number: order.number };
   }
 
   if (mode === "mock") {

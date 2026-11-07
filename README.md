@@ -96,6 +96,30 @@ Vercel runs the store as serverless functions, so three things live outside it: 
 
 ---
 
+## UPI direct to bank (YouPI)
+
+The checkout can offer **UPI** paid straight into your bank account through your own [YouPI PG](https://github.com/youpi-pg/YouPI-PG) gateway, alongside Razorpay and cash on delivery. YouPI runs on its **own server** (it needs a persistent disk, long-running processes, and an Android phone or Gmail to read bank alerts), so it cannot run on Vercel. The store only talks to it over HTTPS.
+
+**Read this first.** YouPI describes itself as an experimental research project, not a certified payment gateway, and suggests staying under about 20 payments a day per bank account. It has no LICENSE file, so check with its maintainers before using it commercially. Collecting business payments into a personal savings account can break your bank's terms; use a current/business account. A bank alert or a customer's UTR is not proof of payment, so by default every UPI order waits for you to check the bank.
+
+**How an order flows**
+
+1. Customer chooses UPI → the order is saved (stock held) → they are sent to your YouPI checkout page.
+2. They pay with any UPI app. YouPI either spots the bank alert (“Bank alerts” mode) or asks them for the UTR (“Customer types the UTR” mode; used automatically when the alert watchers are offline).
+3. YouPI calls `https://YOUR-SITE/api/payments/youpi` (signed with HMAC-SHA256). The order moves to **UPI · to verify** and you get an email if “New order alerts” is set.
+4. You open **Orders → UPI to verify**, find the amount/UTR in your bank app, and press **Payment received** (or **Payment not received**, which cancels the order and frees the stock).
+5. If YouPI later reports `RECONCILED` (a bank-statement line you imported matched), the order is marked paid automatically.
+
+**Setup**
+
+1. Install YouPI on a small VPS following its README, behind HTTPS (for example `pay.yourdomain.in`).
+2. On the YouPI server set `YOUPI_ALLOWED_RETURN_ORIGINS=https://yourdomain.in` (your store's exact origin).
+3. In YouPI Merchant Admin: add an active UPI receiving account, set the webhook URL to `https://yourdomain.in/api/payments/youpi`, and note the merchant ID, a server-side merchant API key, and the webhook secret.
+4. In the store: Admin → Settings → Payments → **UPI direct to bank (YouPI)**. Fill in the gateway address, merchant ID, API key and webhook secret (or set the `YOUPI_*` environment variables), tick **Offer UPI at checkout**, save, then **Test connection**.
+5. Place a ₹1 order with UPI, confirm it in the admin, then refund it by UPI from your bank app and record the refund.
+
+Refunds for UPI orders are made from your bank app and then recorded with **Refund → Already refunded**.
+
 ## Put it live on your own server
 
 **You need:** a VPS with Ubuntu 22.04 or 24.04, 2 GB RAM or more (Hostinger KVM 2, DigitalOcean, AWS Lightsail all work), and your domain.
@@ -125,6 +149,7 @@ Vercel runs the store as serverless functions, so three things live outside it: 
 ### Before you take real orders
 - [ ] Replace the product photos with your own photoshoot (the current photos came from another brand's listing)
 - [ ] Live Razorpay keys, webhook set, one real ₹1 test order refunded
+- [ ] If using UPI via YouPI: gateway on HTTPS, webhook set, one ₹1 UPI order confirmed and refunded
 - [ ] SMTP working (Activity log → Emails shows "sent")
 - [ ] GSTIN, legal name and address in Settings; GST rate for HSN 4203 confirmed with your accountant
 - [ ] Owner password changed; staff added with the smallest role they need

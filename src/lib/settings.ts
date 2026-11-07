@@ -36,6 +36,17 @@ export const DEFAULT_SETTINGS = {
     razorpayWebhookSecret: "",
     prepaidDiscountPercent: 0,
     pendingPaymentMinutes: 30,
+    // YouPI: self-hosted UPI gateway, money goes straight to the store's bank account.
+    youpiEnabled: false,
+    youpiApiUrl: "", // e.g. https://pay.velmont.in
+    youpiMerchantId: "",
+    youpiApiKey: "",
+    youpiWebhookSecret: "",
+    // "auto": YouPI watches bank SMS/email and falls back to "manual" when its observers are offline.
+    // "manual": the customer types the UTR after paying.
+    youpiMode: "auto" as "auto" | "manual",
+    // Confirm an order on a bank alert alone, without waiting for staff to check the bank. Off by default.
+    youpiTrustBankAlerts: false,
   },
   inventory: { lowStockThreshold: 3 },
   notifications: { orderAlertEmail: "" },
@@ -89,6 +100,10 @@ export async function getSettings(): Promise<Settings> {
   if (process.env.RAZORPAY_KEY_ID) merged.payments.razorpayKeyId = process.env.RAZORPAY_KEY_ID;
   if (process.env.RAZORPAY_KEY_SECRET) merged.payments.razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
   if (process.env.RAZORPAY_WEBHOOK_SECRET) merged.payments.razorpayWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (process.env.YOUPI_API_URL) merged.payments.youpiApiUrl = process.env.YOUPI_API_URL;
+  if (process.env.YOUPI_MERCHANT_ID) merged.payments.youpiMerchantId = process.env.YOUPI_MERCHANT_ID;
+  if (process.env.YOUPI_MERCHANT_API_KEY) merged.payments.youpiApiKey = process.env.YOUPI_MERCHANT_API_KEY;
+  if (process.env.YOUPI_WEBHOOK_SECRET) merged.payments.youpiWebhookSecret = process.env.YOUPI_WEBHOOK_SECRET;
   if (fromDb) cache = { at: Date.now(), value: merged };
   return merged;
 }
