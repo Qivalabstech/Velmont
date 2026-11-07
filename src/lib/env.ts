@@ -1,4 +1,8 @@
-export const SITE_URL = (process.env.SITE_URL || "http://localhost:3000").replace(/\/$/, "");
+// SITE_URL wins. On Vercel, fall back to the project's production domain (a system variable Vercel sets itself).
+const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+export const SITE_URL = (
+  process.env.SITE_URL || (vercelHost ? `https://${vercelHost}` : "http://localhost:3000")
+).replace(/\/$/, "");
 export const IS_PROD = process.env.NODE_ENV === "production";
 /** True when running on Vercel (serverless): no local disk, no long-running process. */
 export const IS_VERCEL = Boolean(process.env.VERCEL);
