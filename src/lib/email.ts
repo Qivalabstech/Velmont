@@ -1,5 +1,5 @@
 import "server-only";
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 import { db, emailLogs } from "@/db";
 import { SITE_URL } from "./env";
 import { inr } from "./money";
@@ -7,7 +7,7 @@ import { getSettings } from "./settings";
 import { STATUS_LABEL, METHOD_LABEL } from "./order-status";
 import type { PaymentMethod } from "@/db/schema";
 
-let transport: nodemailer.Transporter | null = null;
+let transport: Transporter | null = null;
 export const emailConfigured = () => Boolean(process.env.SMTP_HOST);
 
 function getTransport() {

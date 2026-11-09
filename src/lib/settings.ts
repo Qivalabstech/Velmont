@@ -31,6 +31,11 @@ export const DEFAULT_SETTINGS = {
     exchangeDays: 7,
   },
   payments: {
+    // Which gateway handles "Pay online". "auto" uses Cashfree when its keys are set, otherwise Razorpay.
+    onlineGateway: "auto" as "auto" | "cashfree" | "razorpay",
+    cashfreeAppId: "",
+    cashfreeSecretKey: "",
+    cashfreeEnv: "production" as "production" | "sandbox",
     razorpayKeyId: "",
     razorpayKeySecret: "",
     razorpayWebhookSecret: "",
@@ -86,20 +91,29 @@ export type SettingKey = keyof Settings;
 
 let cache: { at: number; value: Settings } | null = null;
 
-export async function getSettings(): Promise<Settings> {
-  if (cache && Date.now() - cache.at < 15_000) return cache.value;
+/** Defaults + what is saved in the database, without environment overrides. */
+async function storedSettings(): Promise<{ value: Settings; fromDb: boolean }> {
   let rows: { key: string; value: unknown }[] = [];
   let fromDb = true;
-  try { rows = await db.select().from(settingsTable); } catch { fromDb = false; } // e.g. during docker build with no database
+  try { rows = await db.select().from(settingsTable); } catch { fromDb = false; } // e.g. during a build with no database
   const merged = structuredClone(DEFAULT_SETTINGS) as Settings;
   for (const r of rows) {
     const k = r.key as SettingKey;
     if (k in merged) (merged as Record<string, unknown>)[k] = { ...(merged[k] as object), ...(r.value as object) };
   }
+  return { value: merged, fromDb };
+}
+
+export async function getSettings(): Promise<Settings> {
+  if (cache && Date.now() - cache.at < 15_000) return cache.value;
+  const { value: merged, fromDb } = await storedSettings();
   // Environment variables win over values stored in the database.
   if (process.env.RAZORPAY_KEY_ID) merged.payments.razorpayKeyId = process.env.RAZORPAY_KEY_ID;
   if (process.env.RAZORPAY_KEY_SECRET) merged.payments.razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
   if (process.env.RAZORPAY_WEBHOOK_SECRET) merged.payments.razorpayWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (process.env.CASHFREE_APP_ID) merged.payments.cashfreeAppId = process.env.CASHFREE_APP_ID;
+  if (process.env.CASHFREE_SECRET_KEY) merged.payments.cashfreeSecretKey = process.env.CASHFREE_SECRET_KEY;
+  if (process.env.CASHFREE_ENV === "sandbox" || process.env.CASHFREE_ENV === "production") merged.payments.cashfreeEnv = process.env.CASHFREE_ENV;
   if (process.env.YOUPI_API_URL) merged.payments.youpiApiUrl = process.env.YOUPI_API_URL;
   if (process.env.YOUPI_MERCHANT_ID) merged.payments.youpiMerchantId = process.env.YOUPI_MERCHANT_ID;
   if (process.env.YOUPI_MERCHANT_API_KEY) merged.payments.youpiApiKey = process.env.YOUPI_MERCHANT_API_KEY;
@@ -109,7 +123,8 @@ export async function getSettings(): Promise<Settings> {
 }
 
 export async function saveSetting<K extends SettingKey>(key: K, value: Partial<Settings[K]>) {
-  const current = (await getSettings())[key];
+  // Merge into the stored values only, so secrets that come from environment variables are never copied into the database.
+  const current = (await storedSettings()).value[key];
   const next = { ...(current as object), ...(value as object) };
   await db.insert(settingsTable).values({ key, value: next })
     .onConflictDoUpdate({ target: settingsTable.key, set: { value: next } });

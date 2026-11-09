@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { RegisterForm } from "../Forms";
+import { safeNext } from "@/lib/utils";
 
 export const metadata = { title: "Create account", robots: { index: false } };
 
@@ -11,7 +12,7 @@ export default async function Register({ searchParams }: { searchParams: Promise
         <div className="eyebrow mono">Your account</div>
         <h1 className="display">Create account</h1>
         <p className="muted" style={{ margin: 0 }}>Track orders, save addresses and keep a wishlist.</p>
-        <RegisterForm next={sp.next || "/account"} email={sp.email || ""} />
+        <RegisterForm next={safeNext(sp.next)} email={sp.email || ""} />
         <p className="alt">Already have an account? <Link href="/account/login">Sign in</Link></p>
       </div>
     </div>

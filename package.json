@@ -21,25 +21,29 @@
     "@vercel/blob": "2.8.0",
     "bcryptjs": "2.4.3",
     "drizzle-orm": "0.45.3",
-    "next": "15.5.27",
+    "next": "15.5.29",
     "node-html-parser": "7.0.1",
-    "nodemailer": "6.10.1",
+    "nodemailer": "10.4.0",
     "pg": "8.22.0",
     "react": "19.1.9",
     "react-dom": "19.1.9",
     "server-only": "0.0.1",
-    "sharp": "0.34.4",
-    "zod": "3.25.76"
+    "sharp": "0.35.5",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/bcryptjs": "2.4.6",
     "@types/node": "22.15.30",
-    "@types/nodemailer": "6.4.17",
+    "@types/nodemailer": "8.0.2",
     "@types/pg": "8.21.0",
     "@types/react": "19.1.16",
     "@types/react-dom": "19.1.9",
     "drizzle-kit": "0.31.9",
     "tsx": "4.20.3",
     "typescript": "5.9.2"
+  },
+  "overrides": {
+    "@vercel/oidc": "4.0.7",
+    "postcss": "8.5.32"
   }
 }

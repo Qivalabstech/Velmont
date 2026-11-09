@@ -1,3 +1,4 @@
+import { securityStatus } from "@/lib/health/security";
 import Link from "next/link";
 import { requireStaff } from "@/lib/auth";
 import { liveStatus } from "@/lib/health/live";
@@ -53,11 +54,12 @@ export default async function Health({ searchParams }: { searchParams: Promise<{
   const backupDays = live.backup ? Math.round((Date.now() - live.backup.getTime()) / 86400_000) : null;
   const perf = mobile?.scores.performance ?? null;
 
+  const sec = securityStatus();
   const liveChecks: Check[] = [
     { id: "db", label: "Database", status: live.dbOk ? (live.dbMs < 50 ? "pass" : "warn") : "fail", value: live.dbOk ? `${live.dbMs} ms` : "Not responding" },
     { id: "up", label: "Uptime, last 24 hours", status: live.uptimePct == null ? "info" : live.uptimePct >= 99.5 ? "pass" : live.uptimePct >= 97 ? "warn" : "fail", value: live.uptimePct == null ? "Collecting (every 5 min)" : `${live.uptimePct.toFixed(2)}% of ${live.checks} checks` },
     { id: "resp", label: "Homepage response time", status: live.avgLatency == null ? "info" : live.avgLatency < 600 ? "pass" : live.avgLatency < 1500 ? "warn" : "fail", value: live.avgLatency == null ? "—" : `${live.avgLatency} ms average` },
-    { id: "pay", label: "Online payments (Razorpay)", status: live.payments === "live" ? "pass" : live.payments === "test" || live.payments === "mock" ? "warn" : "fail", value: { live: "Live keys", test: "Test keys: no real money", mock: "Simulated", off: "Not set up" }[live.payments], fix: live.payments !== "live" ? "Add live keys in Settings → Payments before launch." : undefined },
+    { id: "pay", label: `Online payments (${live.gateway === "cashfree" ? "Cashfree" : live.gateway === "razorpay" ? "Razorpay" : "gateway"})`, status: live.payments === "live" ? "pass" : live.payments === "test" || live.payments === "mock" ? "warn" : "fail", value: { live: "Live keys", test: "Test keys: no real money", mock: "Simulated", off: "Not set up" }[live.payments], fix: live.payments !== "live" ? "Add live keys in Settings → Payments before launch." : undefined },
     { id: "mail", label: "Order emails", status: live.email ? "pass" : "warn", value: live.email ? "SMTP connected" : "Not set up", fix: !live.email ? "Customers will not get confirmations. Add SMTP details to the .env file." : undefined },
     { id: "ssl", label: "SSL certificate", status: !live.https ? "fail" : sslDays == null ? "warn" : sslDays > 14 ? "pass" : "fail", value: !live.https ? "Site is not on https" : sslDays == null ? "Could not read" : `Renews in ${sslDays} days`, fix: !live.https ? `SITE_URL is ${SITE_URL}. Point your domain to the server; Caddy issues the certificate automatically.` : undefined },
     live.vercel
@@ -65,6 +67,7 @@ export default async function Health({ searchParams }: { searchParams: Promise<{
       : { id: "backup", label: "Database backup", status: backupDays == null ? "fail" : backupDays <= 1 ? "pass" : backupDays <= 7 ? "warn" : "fail", value: backupDays == null ? "None found" : `${backupDays === 0 ? "Today" : `${backupDays} days ago`}`, fix: backupDays == null || backupDays > 1 ? "The backup container saves one every night; check it is running (see README)." : undefined },
     { id: "err", label: "Errors in the last 24 hours", status: live.errors24h === 0 ? "pass" : live.errors24h < 5 ? "warn" : "fail", value: String(live.errors24h), fix: live.errors24h ? "See Activity log → Errors." : undefined },
     { id: "stuck", label: "Unpaid orders older than 3 hours", status: live.stuckPending ? "warn" : "pass", value: String(live.stuckPending), fix: live.stuckPending ? (live.vercel ? "They are cancelled at the next checkout, when staff open Orders, or by the daily job." : "These should auto-cancel; if they stay, the background scheduler is not running.") : undefined },
+    { id: "sec", label: "Security settings", status: sec.problems.length ? (sec.critical ? "fail" : "warn") : "pass", value: sec.problems.length ? `${sec.problems.length} to fix` : "Secrets set, test switches off", fix: sec.problems.length ? sec.problems.join(" ") : undefined },
     { id: "disk", label: "Disk space", status: !live.disk ? "info" : live.disk.freeGb > 5 ? "pass" : live.disk.freeGb > 1 ? "warn" : "fail", value: live.disk ? `${live.disk.freeGb.toFixed(1)} GB free of ${live.disk.totalGb.toFixed(0)} GB` : "—" },
     { id: "mem", label: "App memory", status: live.vercel ? "info" : live.memMb < 700 ? "pass" : "warn", value: `${live.memMb} MB · up ${Math.floor(live.uptimeSec / 3600)}h ${Math.floor((live.uptimeSec % 3600) / 60)}m · Node ${live.node}` },
   ];

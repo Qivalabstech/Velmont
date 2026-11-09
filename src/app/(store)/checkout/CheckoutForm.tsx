@@ -12,13 +12,15 @@ import { LockIcon } from "@/components/store/Icons";
 import { CouponBox } from "../cart/CartView";
 import { placeOrder, quote as fetchQuote, type CheckoutInput, type PlaceResult } from "./actions";
 import { fetchCart } from "../actions";
+import { openCashfree } from "@/lib/cashfree-client";
 
 type Addr = { id: string; name: string; phone: string; line1: string; line2: string; city: string; state: string; pincode: string; isDefault: boolean };
 type RzpSuccess = { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string };
 declare global { interface Window { Razorpay?: new (o: object) => { open: () => void; on: (e: string, cb: (r: unknown) => void) => void } } }
+export type OnlineInfo = { provider: "cashfree" | "razorpay" | "mock" | "off"; mode: string };
 
-export function CheckoutForm({ lines, quote, paymentsMode, upiReady, customer, saved, cod, prepaidPercent, delivery }: {
-  lines: CartLine[]; quote: { online: Totals; cod: Totals }; paymentsMode: "live" | "test" | "mock" | "off"; upiReady: boolean;
+export function CheckoutForm({ lines, quote, online, upiReady, customer, saved, cod, prepaidPercent, delivery }: {
+  lines: CartLine[]; quote: { online: Totals; cod: Totals }; online: OnlineInfo; upiReady: boolean;
   customer: { name: string; email: string; phone: string } | null; saved: Addr[];
   cod: { enabled: boolean; fee: number; max: number }; prepaidPercent: number; delivery: string;
 }) {
@@ -27,8 +29,8 @@ export function CheckoutForm({ lines, quote, paymentsMode, upiReady, customer, s
   const [q, setQ] = useState(quote);
   const def = saved.find((a) => a.isDefault) ?? saved[0];
   const [addrId, setAddrId] = useState<string>(def?.id ?? "new");
-  const onlineOk = paymentsMode !== "off";
-  const [method, setMethod] = useState<"RAZORPAY" | "COD" | "UPI">(upiReady ? "UPI" : onlineOk ? "RAZORPAY" : "COD");
+  const onlineOk = online.provider !== "off";
+  const [method, setMethod] = useState<"ONLINE" | "COD" | "UPI">(onlineOk ? "ONLINE" : upiReady ? "UPI" : "COD");
   const [leaving, setLeaving] = useState(false);
   const [form, setForm] = useState({
     email: customer?.email ?? "", phone: customer?.phone ?? "", name: customer?.name ?? "",
@@ -70,7 +72,7 @@ export function CheckoutForm({ lines, quote, paymentsMode, upiReady, customer, s
       email: form.email, phone: chosen ? chosen.phone : form.phone, name: a.name, line1: a.line1, line2: a.line2,
       city: a.city, state: a.state, pincode: a.pincode, method, note: form.note, saveAddress: !chosen && form.saveAddress && !!customer,
     };
-    if (method === "RAZORPAY" && lastRzp) { openRazorpay(lastRzp); return; }
+    if (method === "ONLINE" && lastRzp) { openRazorpay(lastRzp); return; }
     start(async () => {
       const r = await placeOrder(payload);
       if (!r.ok) {
@@ -81,6 +83,16 @@ export function CheckoutForm({ lines, quote, paymentsMode, upiReady, customer, s
       if (r.kind === "done") { setCart(await fetchCart()); router.push(`/order/${r.number}?t=${r.token}`); return; }
       if (r.kind === "redirect") { setLeaving(true); window.location.assign(r.url); return; }
       if (r.kind === "mock") { setMock(r); return; }
+      if (r.kind === "cashfree") {
+        setLeaving(true);
+        try { await openCashfree(r.sessionId, r.mode); }
+        catch (e) {
+          setLeaving(false);
+          setErr({ msg: `${e instanceof Error ? e.message : "Payment did not start."} Your order ${r.number} is saved; you can pay from the order page.` });
+          router.push(`/order/${r.number}?t=${r.token}&pay=failed`);
+        }
+        return;
+      }
       setLastRzp(r);
       openRazorpay(r);
     });
@@ -102,7 +114,8 @@ export function CheckoutForm({ lines, quote, paymentsMode, upiReady, customer, s
 
   return (
     <>
-      {paymentsMode !== "mock" && paymentsMode !== "off" && <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />}
+      {online.provider === "razorpay" && <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />}
+      {online.provider === "cashfree" && <Script src="https://sdk.cashfree.com/js/v3/cashfree.js" strategy="afterInteractive" />}
       <form className="checkout" onSubmit={submit} noValidate>
         <div>
           <section className="panel">
@@ -165,18 +178,18 @@ export function CheckoutForm({ lines, quote, paymentsMode, upiReady, customer, s
           <section className="panel">
             <h2 className="step-title"><i>3</i>Payment</h2>
             <div className="pay-opts" role="radiogroup" aria-label="Payment method">
+              <label className="pay-opt" aria-disabled={!onlineOk} style={!onlineOk ? { opacity: .5 } : undefined}>
+                <input type="radio" name="method" checked={method === "ONLINE"} disabled={!onlineOk} onChange={() => setMethod("ONLINE")} />
+                <span><b>Pay online</b><small>{onlineOk ? `UPI, cards, netbanking and wallets${online.provider === "cashfree" ? " via Cashfree" : online.provider === "razorpay" ? " via Razorpay" : ""}` : "Not available right now"}{prepaidPercent > 0 ? ` · extra ${prepaidPercent}% off` : ""}</small></span>
+                <span className="tnum">{inr(q.online.total)}</span>
+              </label>
               {upiReady && (
                 <label className="pay-opt">
                   <input type="radio" name="method" checked={method === "UPI"} onChange={() => setMethod("UPI")} />
-                  <span><b>UPI</b><small>GPay, PhonePe, Paytm or any UPI app{prepaidPercent > 0 ? ` · extra ${prepaidPercent}% off` : ""}</small></span>
+                  <span><b>UPI direct to our bank</b><small>Pay by any UPI app, then share the UTR{prepaidPercent > 0 ? ` · extra ${prepaidPercent}% off` : ""}</small></span>
                   <span className="tnum">{inr(q.online.total)}</span>
                 </label>
               )}
-              <label className="pay-opt" aria-disabled={!onlineOk} style={!onlineOk ? { opacity: .5 } : undefined}>
-                <input type="radio" name="method" checked={method === "RAZORPAY"} disabled={!onlineOk} onChange={() => setMethod("RAZORPAY")} />
-                <span><b>{upiReady ? "Cards, netbanking and wallets" : "Pay online"}</b><small>{onlineOk ? (upiReady ? "Secure payment via Razorpay" : "UPI, cards, netbanking and wallets via Razorpay") : "Not available right now"}{prepaidPercent > 0 ? ` · extra ${prepaidPercent}% off` : ""}</small></span>
-                <span className="tnum">{inr(q.online.total)}</span>
-              </label>
               {cod.enabled && (
                 <label className="pay-opt" style={!codAllowed ? { opacity: .5 } : undefined}>
                   <input type="radio" name="method" checked={method === "COD"} disabled={!codAllowed} onChange={() => setMethod("COD")} />
@@ -185,7 +198,7 @@ export function CheckoutForm({ lines, quote, paymentsMode, upiReady, customer, s
                 </label>
               )}
             </div>
-            {paymentsMode === "mock" && method === "RAZORPAY" && <div className="alert info" style={{ marginTop: 12 }}>Test mode: no Razorpay keys are set, so online payment is simulated.</div>}
+            {online.provider === "mock" && method === "ONLINE" && <div className="alert info" style={{ marginTop: 12 }}>Test mode: no Razorpay keys are set, so online payment is simulated.</div>}
           </section>
         </div>
 
@@ -210,9 +223,9 @@ export function CheckoutForm({ lines, quote, paymentsMode, upiReady, customer, s
           <div className="muted" style={{ fontSize: ".8rem" }}>Includes GST of {inr(t.tax)} · Delivery in {delivery}</div>
           {err && !err.field && <div className="alert bad" role="alert">{err.msg}</div>}
           <button className="btn solid" type="submit" disabled={pending || verifying || leaving} style={{ minHeight: 52 }}>
-            {pending || verifying || leaving ? <><span className="spinner" /> {verifying ? "Confirming payment…" : leaving ? "Opening UPI…" : "Placing order…"}</> : method === "COD" ? `Place order · ${inr(t.total)}` : method === "UPI" ? `Pay ${inr(t.total)} by UPI` : `Pay ${inr(t.total)}`}
+            {pending || verifying || leaving ? <><span className="spinner" /> {verifying ? "Confirming payment…" : leaving ? "Opening payment…" : "Placing order…"}</> : method === "COD" ? `Place order · ${inr(t.total)}` : method === "UPI" ? `Pay ${inr(t.total)} by UPI` : `Pay ${inr(t.total)}`}
           </button>
-          <div className="secure"><LockIcon /> {method === "COD" ? "Pay in cash when the belt arrives" : method === "UPI" ? "Paid straight to our bank account by UPI" : "Secure payment by Razorpay"}</div>
+          <div className="secure"><LockIcon /> {method === "COD" ? "Pay in cash when the belt arrives" : method === "UPI" ? "Paid straight to our bank account by UPI" : online.provider === "cashfree" ? "Secure payment by Cashfree Payments" : "Secure payment by Razorpay"}</div>
           <p className="muted" style={{ fontSize: ".78rem", margin: 0 }}>By placing the order you agree to our <Link href="/pages/terms">terms</Link> and <Link href="/pages/returns">exchange policy</Link>.</p>
         </aside>
       </form>

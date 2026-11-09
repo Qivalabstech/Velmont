@@ -4,7 +4,7 @@ import path from "path";
 import tls from "tls";
 import { and, desc, gte, lt, eq, sql } from "drizzle-orm";
 import { db, uptimeChecks, errorLogs, orders, visits } from "@/db";
-import { paymentsMode } from "@/lib/razorpay";
+import { onlineGateway } from "@/lib/online";
 import { emailConfigured } from "@/lib/email";
 import { BACKUP_DIR, SITE_URL, UPLOAD_DIR } from "@/lib/env";
 
@@ -68,7 +68,7 @@ export async function liveStatus() {
     db.select({ n: sql<number>`count(*)::int` }).from(errorLogs).where(gte(errorLogs.createdAt, day)),
     db.select({ n: sql<number>`count(*)::int` }).from(orders).where(and(eq(orders.status, "PENDING_PAYMENT"), lt(orders.createdAt, new Date(Date.now() - 3 * 3600_000)))),
     db.select({ n: sql<number>`count(distinct ${visits.visitor})::int` }).from(visits).where(gte(visits.createdAt, day)),
-    paymentsMode(), lastBackup(),
+    onlineGateway(), lastBackup(),
   ]);
   let disk: { freeGb: number; totalGb: number } | null = null;
   if (!process.env.VERCEL) try {
@@ -89,7 +89,8 @@ export async function liveStatus() {
     dbOk, dbMs, uptimePct: checks.length ? (okChecks.length / checks.length) * 100 : null, checks: checks.length,
     avgLatency: okChecks.length ? Math.round(okChecks.reduce((a, c) => a + c.latencyMs, 0) / okChecks.length) : null,
     buckets, errors24h: errs.n, stuckPending: stuck.n, visitors24h: visits24.n,
-    payments: mode, email: emailConfigured(), https, sslExpires: ssl, backup,
+    payments: mode.provider === "off" || mode.provider === "mock" ? mode.mode : mode.mode === "production" || mode.mode === "live" ? "live" : "test",
+    gateway: mode.provider, email: emailConfigured(), https, sslExpires: ssl, backup,
     disk, memMb: Math.round(mem.rss / 1e6), uptimeSec: Math.round(process.uptime()), node: process.version,
     lastCheck: checks[0]?.createdAt ?? null, vercel: Boolean(process.env.VERCEL),
   };

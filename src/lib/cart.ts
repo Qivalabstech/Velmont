@@ -95,7 +95,7 @@ export async function computeTotals(
     } else couponError = error;
   }
   const afterCoupon = subtotal - couponDiscount;
-  const prepaidDiscount = (opts.method === "RAZORPAY" || opts.method === "UPI") && s.payments.prepaidDiscountPercent > 0
+  const prepaidDiscount = (opts.method === "RAZORPAY" || opts.method === "UPI" || opts.method === "CASHFREE") && s.payments.prepaidDiscountPercent > 0
     ? Math.floor((afterCoupon * s.payments.prepaidDiscountPercent) / 100) : 0;
   const goods = afterCoupon - prepaidDiscount;
   const shipping = subtotal === 0 || freeShip || s.shipping.freeAbove === 0 || goods >= s.shipping.freeAbove ? 0 : s.shipping.flatRate;

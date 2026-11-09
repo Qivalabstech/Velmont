@@ -12,7 +12,7 @@ type S = { error?: string; ok?: string } | null;
 export async function adminLogin(_: S, fd: FormData): Promise<S> {
   const ip = await clientIp();
   const email = str(fd, "email").toLowerCase();
-  if (!rateLimit(`alogin:${ip}`, 8, 900_000).ok || !rateLimit(`alogin:${email}`, 5, 900_000).ok)
+  if (!(await rateLimit(`alogin:${ip}`, 8, 900_000)).ok || !(await rateLimit(`alogin:${email}`, 5, 900_000)).ok)
     return { error: "Too many attempts. Wait 15 minutes and try again." };
   const u = await findUserByEmail(email);
   if (!u || u.kind !== "STAFF" || !(await verifyPassword(str(fd, "password"), u.passwordHash))) {

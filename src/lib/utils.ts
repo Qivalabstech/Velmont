@@ -51,3 +51,10 @@ export function bool(fd: FormData, k: string) {
   const v = fd.get(k);
   return v === "on" || v === "true" || v === "1";
 }
+
+/** Only allow redirects to a path on this site ("/account"), never to another site ("//evil.com", "/\evil.com", "https://…"). */
+export function safeNext(n: string | null | undefined, fallback = "/account") {
+  if (!n || typeof n !== "string") return fallback;
+  if (!n.startsWith("/") || n.startsWith("//") || n.startsWith("/\\") || /[\r\n\t]/.test(n)) return fallback;
+  return n.slice(0, 300);
+}

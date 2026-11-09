@@ -1,3 +1,4 @@
+import { csvCell } from "@/lib/csv";
 import { desc } from "drizzle-orm";
 import { db, orders } from "@/db";
 import { getStaff } from "@/lib/auth";
@@ -5,7 +6,7 @@ import { orderWhere } from "../query";
 import { STATUS_LABEL, PAYMENT_LABEL } from "@/lib/order-status";
 import { audit } from "@/lib/audit";
 
-const esc = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+const esc = csvCell;
 
 export async function GET(req: Request) {
   const me = await getStaff();

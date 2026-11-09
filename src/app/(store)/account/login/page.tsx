@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCustomer } from "@/lib/auth";
+import { safeNext } from "@/lib/utils";
 import { LoginForm } from "../Forms";
 
 export const metadata = { title: "Sign in", robots: { index: false } };
 
 export default async function Login({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
-  const next = (await searchParams).next || "/account";
+  const next = safeNext((await searchParams).next);
   if (await getCustomer()) redirect(next);
   return (
     <div className="wrap">

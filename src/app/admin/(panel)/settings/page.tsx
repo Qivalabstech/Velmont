@@ -7,7 +7,9 @@ import { SITE_URL } from "@/lib/env";
 import { INDIAN_STATES } from "@/lib/utils";
 import { PageHead, Card, Pill } from "@/components/admin/ui";
 import { AForm, Submit } from "@/components/admin/Form";
-import { saveStore, saveShipping, savePayments, testRazorpay, saveNotifications, saveYoupi, testYoupi } from "./actions";
+import { saveStore, saveShipping, savePayments, testRazorpay, saveNotifications, saveYoupi, testYoupi, savePaymentGeneral, saveCashfree, testCashfree } from "./actions";
+import { onlineGateway } from "@/lib/online";
+import { cashfreeMode } from "@/lib/cashfree";
 import { youpiConfig, youpiMissing } from "@/lib/youpi";
 
 export const metadata = { title: "Settings" };
@@ -18,6 +20,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const s = await getSettings();
   const mode = await paymentsMode();
   const envKeys = !!process.env.RAZORPAY_KEY_ID;
+  const [gw, cfMode] = await Promise.all([onlineGateway(), cashfreeMode()]);
+  const cfEnv = !!(process.env.CASHFREE_APP_ID || process.env.CASHFREE_SECRET_KEY);
   const yp = await youpiConfig();
   const ypMissing = youpiMissing(yp);
   const ypEnv = !!(process.env.YOUPI_API_URL || process.env.YOUPI_MERCHANT_API_KEY);
@@ -83,16 +87,48 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       {tab === "payments" && (
         <div className="stack">
+          <Card title="Online payments" sub={<>“Pay online” uses: <Pill tone={gw.provider === "off" ? "bad" : gw.provider === "mock" ? "warn" : "good"}>{gw.provider === "cashfree" ? `Cashfree (${gw.mode === "sandbox" ? "test mode" : "live"})` : gw.provider === "razorpay" ? `Razorpay (${gw.mode === "test" ? "test mode" : "live"})` : gw.provider === "mock" ? "Simulated (development)" : "Not set up"}</Pill></>}>
+            <AForm action={savePaymentGeneral} className="fgrid">
+              <div className="field full"><label htmlFor="pg-g">Gateway for “Pay online”</label>
+                <select id="pg-g" name="onlineGateway" className="select" defaultValue={s.payments.onlineGateway}>
+                  <option value="auto">Automatic: Cashfree when its keys are set, otherwise Razorpay</option>
+                  <option value="cashfree">Cashfree only</option>
+                  <option value="razorpay">Razorpay only</option>
+                </select></div>
+              <div className="field"><label htmlFor="rz-d">Extra discount for paying online (%)</label><input id="rz-d" name="prepaidDiscountPercent" type="number" min={0} max={50} className="input" defaultValue={s.payments.prepaidDiscountPercent} /><span className="hint">Encourages prepaid orders over COD. 0 turns it off.</span></div>
+              <div className="field"><label htmlFor="rz-m">Hold stock for unpaid orders (minutes)</label><input id="rz-m" name="pendingPaymentMinutes" type="number" min={16} max={1440} className="input" defaultValue={s.payments.pendingPaymentMinutes} /><span className="hint">Also how long the Cashfree payment page stays open (at least 16 minutes).</span></div>
+              <div><Submit>Save</Submit></div>
+            </AForm>
+          </Card>
+          <Card title="Cashfree Payments" sub={<>Status: <Pill tone={cfMode === "production" ? "good" : cfMode === "sandbox" ? "info" : "neutral"}>{cfMode === "production" ? "Live keys" : cfMode === "sandbox" ? "Test mode (sandbox)" : "Not set up"}</Pill></>}>
+            {cfEnv && <p className="hint-box" style={{ marginTop: 0 }}>Cashfree keys are set as server environment variables, which override the values below.</p>}
+            <AForm action={saveCashfree} className="fgrid">
+              <div className="field"><label htmlFor="cf-a">App ID (Client ID)</label><input id="cf-a" name="cashfreeAppId" className="input" defaultValue={s.payments.cashfreeAppId} autoComplete="off" /></div>
+              <div className="field"><label htmlFor="cf-s">Secret Key <span className="muted">({mask(s.payments.cashfreeSecretKey)})</span></label><input id="cf-s" name="cashfreeSecretKey" type="password" className="input" placeholder="Leave blank to keep" autoComplete="new-password" /></div>
+              <div className="field"><label htmlFor="cf-e">Environment</label>
+                <select id="cf-e" name="cashfreeEnv" className="select" defaultValue={s.payments.cashfreeEnv}>
+                  <option value="production">Production (real money)</option>
+                  <option value="sandbox">Test / sandbox</option>
+                </select></div>
+              <label className="check full"><input type="checkbox" name="clearCashfree" />Remove saved Cashfree keys</label>
+              <div><Submit>Save Cashfree settings</Submit></div>
+            </AForm>
+            <AForm action={testCashfree} style={{ marginTop: 12 }}><Submit className="btn sm" pendingText="Checking…">Test connection</Submit></AForm>
+            <ol style={{ margin: "16px 0 0", paddingLeft: 18, display: "grid", gap: 6, fontSize: ".9rem" }}>
+              <li>Cashfree Dashboard → Developers → API Keys: copy the App ID and Secret Key (test keys for sandbox, production keys after your account is activated).</li>
+              <li>Developers → Webhooks: add <code>{SITE_URL}/api/payments/cashfree/webhook</code> for Payment events. The Secret Key above also checks webhook signatures.</li>
+              <li>Developers → Whitelisting: add your domain <code>{siteOrigin}</code> (Cashfree only opens checkout on approved domains).</li>
+              <li>Place a ₹1 order, check it shows as paid here, then refund it from the order page.</li>
+            </ol>
+          </Card>
           <Card title="Razorpay" sub={<>Status: <Pill tone={mode === "live" ? "good" : mode === "test" ? "info" : mode === "mock" ? "warn" : "bad"}>{mode === "live" ? "Live payments" : mode === "test" ? "Test mode" : mode === "mock" ? "Simulated (development)" : "Not set up"}</Pill></>}>
             {envKeys && <p className="hint-box" style={{ marginTop: 0 }}>Keys are set in the server’s .env file, which overrides the values below.</p>}
             <AForm action={savePayments} className="fgrid">
               <div className="field full"><label htmlFor="rz-k">Key ID</label><input id="rz-k" name="razorpayKeyId" className="input" defaultValue={s.payments.razorpayKeyId} placeholder="rzp_live_…" autoComplete="off" /></div>
               <div className="field"><label htmlFor="rz-s">Key secret <span className="muted">({mask(s.payments.razorpayKeySecret)})</span></label><input id="rz-s" name="razorpayKeySecret" type="password" className="input" placeholder="Leave blank to keep" autoComplete="new-password" /></div>
               <div className="field"><label htmlFor="rz-w">Webhook secret <span className="muted">({mask(s.payments.razorpayWebhookSecret)})</span></label><input id="rz-w" name="razorpayWebhookSecret" type="password" className="input" placeholder="Leave blank to keep" autoComplete="new-password" /></div>
-              <div className="field"><label htmlFor="rz-d">Extra discount for paying online (%)</label><input id="rz-d" name="prepaidDiscountPercent" type="number" min={0} max={50} className="input" defaultValue={s.payments.prepaidDiscountPercent} /><span className="hint">Encourages prepaid orders over COD. 0 turns it off.</span></div>
-              <div className="field"><label htmlFor="rz-m">Hold stock for unpaid orders (minutes)</label><input id="rz-m" name="pendingPaymentMinutes" type="number" min={10} className="input" defaultValue={s.payments.pendingPaymentMinutes} /></div>
               <label className="check full"><input type="checkbox" name="clearKeys" />Remove saved keys</label>
-              <div><Submit>Save payment settings</Submit></div>
+              <div><Submit>Save Razorpay settings</Submit></div>
             </AForm>
             <AForm action={testRazorpay} style={{ marginTop: 12 }}><Submit className="btn sm" pendingText="Checking…">Test connection</Submit></AForm>
           </Card>

@@ -1,5 +1,5 @@
 import { lt } from "drizzle-orm";
-import { db, uptimeChecks, visits, sessions, errorLogs, carts } from "@/db";
+import { db, uptimeChecks, visits, sessions, errorLogs, carts, rateLimits, gatewayDeliveries } from "@/db";
 import { releaseExpiredOrders } from "./orders";
 import { recordUptime } from "./health/live";
 import { runSiteAudit } from "./health/audit";
@@ -22,6 +22,8 @@ async function daily() {
     await db.delete(sessions).where(lt(sessions.expiresAt, new Date()));
     await db.delete(errorLogs).where(lt(errorLogs.createdAt, ago(90)));
     await db.delete(carts).where(lt(carts.updatedAt, ago(60)));
+    await db.delete(rateLimits).where(lt(rateLimits.resetAt, new Date()));
+    await db.delete(gatewayDeliveries).where(lt(gatewayDeliveries.createdAt, ago(90)));
   } catch (e) { await logError("scheduler.cleanup", e); }
   try { await runSiteAudit("nightly"); } catch (e) { await logError("scheduler.audit", e); }
   if (pagespeedAvailable()) {

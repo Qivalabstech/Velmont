@@ -26,7 +26,8 @@ export const paymentStatus = pgEnum("payment_status", [
   "VERIFYING",
 ]);
 // UPI = direct UPI to the store's bank account through a self-hosted YouPI gateway.
-export const paymentMethod = pgEnum("payment_method", ["RAZORPAY", "COD", "UPI"]);
+// CASHFREE = online payment (UPI, cards, netbanking, wallets) through Cashfree Payments.
+export const paymentMethod = pgEnum("payment_method", ["RAZORPAY", "COD", "UPI", "CASHFREE"]);
 export type PaymentMethod = (typeof paymentMethod.enumValues)[number];
 export const reviewStatus = pgEnum("review_status", ["PENDING", "APPROVED", "REJECTED"]);
 
@@ -206,6 +207,8 @@ export const orders = pgTable("orders", {
   internalNote: text("internal_note").notNull().default(""),
   razorpayOrderId: text("razorpay_order_id").unique(),
   razorpayPaymentId: text("razorpay_payment_id"),
+  cashfreeOrderId: text("cashfree_order_id").unique(), // order_id sent to Cashfree (order number, or number-R2 on a retry)
+  cashfreePaymentId: text("cashfree_payment_id"),
   youpiPaymentId: text("youpi_payment_id"),
   youpiMethod: text("youpi_method"), // UPI (bank alerts) or MANUAL_UPI (customer enters UTR)
   upiUtr: text("upi_utr"),
@@ -384,6 +387,13 @@ export const errorLogs = pgTable("error_logs", {
   path: text("path").notNull().default(""),
   createdAt: createdAt(),
 }, (t) => [index("error_created_idx").on(t.createdAt)]);
+
+/** Request counters for rate limiting (login, checkout, forms). Shared across all server instances. */
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(), // sha256 of the limiter key, so no emails or IPs are stored
+  count: integer("count").notNull().default(0),
+  resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
+});
 
 /** Payment gateway webhook deliveries already processed, so a retried delivery is not applied twice. */
 export const gatewayDeliveries = pgTable("gateway_deliveries", {

@@ -22,6 +22,20 @@
       "when": 1794086202323,
       "tag": "0002_youpi",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794245617108,
+      "tag": "0003_cashfree",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794246085168,
+      "tag": "0004_rate_limits",
+      "breakpoints": true
     }
   ]
 }

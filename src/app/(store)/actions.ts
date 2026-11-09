@@ -64,7 +64,7 @@ export async function removeCoupon(): Promise<Res> {
 
 export async function subscribe(email: string) {
   const ip = await clientIp();
-  if (!rateLimit(`sub:${ip}`, 5, 600_000).ok) return { ok: false, error: "Too many tries. Try again in a few minutes." };
+  if (!(await rateLimit(`sub:${ip}`, 5, 600_000)).ok) return { ok: false, error: "Too many tries. Try again in a few minutes." };
   if (!isEmail(email)) return { ok: false, error: "Enter a full email address, like name@example.com." };
   await db.insert(subscribers).values({ email: email.toLowerCase() }).onConflictDoNothing();
   return { ok: true };
@@ -72,7 +72,7 @@ export async function subscribe(email: string) {
 
 export async function sendContact(_: unknown, fd: FormData) {
   const ip = await clientIp();
-  if (!rateLimit(`contact:${ip}`, 4, 600_000).ok) return { ok: false, error: "Too many messages. Try again in a few minutes." };
+  if (!(await rateLimit(`contact:${ip}`, 4, 600_000)).ok) return { ok: false, error: "Too many messages. Try again in a few minutes." };
   const name = String(fd.get("name") || "").trim(), email = String(fd.get("email") || "").trim();
   const message = String(fd.get("message") || "").trim();
   if (fd.get("company")) return { ok: true }; // honeypot

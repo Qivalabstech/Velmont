@@ -6,7 +6,9 @@ import { getCartRecord, getCartLines, computeTotals } from "@/lib/cart";
 import { getCustomer, clientIp } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { createOrder, clearCart, sendPlacedEmails, StockError, releaseExpiredOrders } from "@/lib/orders";
-import { createRazorpayOrder, paymentsMode, razorpayKeys } from "@/lib/razorpay";
+import { createRazorpayOrder, razorpayKeys } from "@/lib/razorpay";
+import { onlineGateway } from "@/lib/online";
+import { startCashfreePayment } from "@/lib/cashfree-orders";
 import { youpiReady } from "@/lib/youpi";
 import { startUpiPayment } from "@/lib/youpi-start";
 import { orderToken } from "@/lib/order-token";
@@ -23,7 +25,7 @@ const Input = z.object({
   city: z.string().trim().min(2, "Enter the city.").max(60),
   state: z.string().refine((s) => INDIAN_STATES.includes(s), "Choose a state."),
   pincode: z.string().trim().regex(/^[1-9]\d{5}$/, "Enter a 6-digit pincode."),
-  method: z.enum(["RAZORPAY", "COD", "UPI"]),
+  method: z.enum(["ONLINE", "RAZORPAY", "COD", "UPI"]), // ONLINE = whichever gateway is active (Cashfree or Razorpay)
   note: z.string().max(500).default(""),
   saveAddress: z.boolean().default(false),
 });
@@ -35,7 +37,7 @@ export async function quote(couponCode: string | null) {
   const lines = await getCartLines(cart.id);
   const s = await getSettings();
   const [online, cod] = await Promise.all([
-    computeTotals(lines, { couponCode: couponCode ?? cart.couponCode, method: "RAZORPAY", settings: s }),
+    computeTotals(lines, { couponCode: couponCode ?? cart.couponCode, method: "CASHFREE", settings: s }), // any prepaid method
     computeTotals(lines, { couponCode: couponCode ?? cart.couponCode, method: "COD", settings: s }),
   ]);
   return { online, cod };
@@ -46,17 +48,21 @@ export type PlaceResult =
   | { ok: true; kind: "razorpay"; key: string; rzpOrderId: string; amount: number; number: string; name: string; email: string; phone: string; storeName: string }
   | { ok: true; kind: "mock"; rzpOrderId: string; amount: number; number: string }
   | { ok: true; kind: "redirect"; url: string; number: string }
+  | { ok: true; kind: "cashfree"; sessionId: string; mode: "production" | "sandbox"; number: string; token: string }
   | { ok: false; error: string; field?: string };
 
 export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
   const ip = await clientIp();
-  if (!rateLimit(`checkout:${ip}`, 10, 600_000).ok) return { ok: false, error: "Too many attempts. Wait a few minutes and try again." };
+  if (!(await rateLimit(`checkout:${ip}`, 10, 600_000)).ok) return { ok: false, error: "Too many attempts. Wait a few minutes and try again." };
   const parsed = Input.safeParse(raw);
   if (!parsed.success) {
     const i = parsed.error.issues[0];
     return { ok: false, error: i.message, field: String(i.path[0]) };
   }
   const d = parsed.data;
+  const gateway = await onlineGateway();
+  // The browser only says "pay online"; the server decides which gateway that means.
+  const method = d.method === "ONLINE" || d.method === "RAZORPAY" ? (gateway.provider === "cashfree" ? "CASHFREE" : "RAZORPAY") : d.method;
   await releaseExpiredOrders().catch(() => {}); // frees stock held by abandoned online payments
   const cart = await getCartRecord(false);
   if (!cart) return { ok: false, error: "Your bag is empty." };
@@ -67,20 +73,19 @@ export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
 
   const s = await getSettings();
   const customer = await getCustomer();
-  const totals = await computeTotals(lines, { couponCode: cart.couponCode, method: d.method, email: d.email, settings: s });
+  const totals = await computeTotals(lines, { couponCode: cart.couponCode, method, email: d.email, settings: s });
   if (totals.couponError) await db.update(carts).set({ couponCode: null }).where(eq(carts.id, cart.id));
   if (d.method === "COD") {
     if (!s.shipping.codEnabled) return { ok: false, error: "Cash on delivery is not available right now." };
     if (totals.total > s.shipping.codMaxOrder) return { ok: false, error: "This order is above the cash on delivery limit. Pay online instead." };
   }
-  const mode = await paymentsMode();
-  if (d.method === "RAZORPAY" && mode === "off") return { ok: false, error: "Online payment is not set up yet. Choose cash on delivery or contact us." };
+  if ((method === "RAZORPAY" || method === "CASHFREE") && gateway.provider === "off") return { ok: false, error: "Online payment is not set up yet. Choose cash on delivery or contact us." };
   if (d.method === "UPI" && !(await youpiReady())) return { ok: false, error: "UPI payment is not available right now. Choose another way to pay." };
 
   const address = { name: d.name, phone: d.phone, line1: d.line1, line2: d.line2, city: d.city, state: d.state, pincode: d.pincode };
   let order;
   try {
-    order = await createOrder({ lines, totals, method: d.method, email: d.email, phone: d.phone, address, note: d.note, userId: customer?.id ?? null });
+    order = await createOrder({ lines, totals, method, email: d.email, phone: d.phone, address, note: d.note, userId: customer?.id ?? null });
   } catch (e) {
     if (e instanceof StockError) return { ok: false, error: e.message };
     await logError("checkout", e, "/checkout");
@@ -113,7 +118,14 @@ export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
     return { ok: true, kind: "redirect", url: r.url, number: order.number };
   }
 
-  if (mode === "mock") {
+  if (method === "CASHFREE") {
+    const r = await startCashfreePayment(order);
+    if (!r.ok) return { ok: false, error: r.error };
+    if ("paid" in r) return { ok: true, kind: "done", number: order.number, token: orderToken(order.number) };
+    return { ok: true, kind: "cashfree", sessionId: r.sessionId, mode: r.mode, number: order.number, token: orderToken(order.number) };
+  }
+
+  if (gateway.provider === "mock") {
     const rzpOrderId = `mock_${order.id}`;
     await db.update(orders).set({ razorpayOrderId: rzpOrderId }).where(eq(orders.id, order.id));
     return { ok: true, kind: "mock", rzpOrderId, amount: order.total, number: order.number };

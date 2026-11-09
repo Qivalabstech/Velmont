@@ -21,7 +21,7 @@ export default async function Track({ searchParams }: { searchParams: Promise<{ 
   let o = null;
   if (number && contact) {
     const ip = await clientIp();
-    if (!rateLimit(`track:${ip}`, 20, 600_000).ok) error = "Too many lookups. Try again in a few minutes.";
+    if (!(await rateLimit(`track:${ip}`, 20, 600_000)).ok) error = "Too many lookups. Try again in a few minutes.";
     else {
       const byEmail = contact.includes("@");
       o = await db.query.orders.findFirst({

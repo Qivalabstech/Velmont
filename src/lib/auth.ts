@@ -1,3 +1,4 @@
+import { authSecret } from "./secret";
 import "server-only";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
@@ -15,7 +16,7 @@ const CUSTOMER_TTL = 30 * 24 * 3600 * 1000;
 const ADMIN_TTL = 12 * 3600 * 1000;
 
 export const hashToken = (t: string) =>
-  createHash("sha256").update(t + (process.env.AUTH_SECRET || "")).digest("hex");
+  createHash("sha256").update(t + authSecret()).digest("hex");
 export const newToken = () => randomBytes(32).toString("base64url");
 
 export const hashPassword = (p: string) => bcrypt.hash(p, 12);
@@ -27,9 +28,15 @@ export function passwordProblem(p: string) {
   return null;
 }
 
+/**
+ * The visitor's IP, for rate limits. On Vercel the edge overwrites these headers, so they can be trusted.
+ * Behind our own Caddy proxy the client can prepend fake X-Forwarded-For entries, so use the last one (added by Caddy).
+ */
 export async function clientIp() {
   const h = await headers();
-  return (h.get("x-forwarded-for") || h.get("x-real-ip") || "").split(",")[0].trim() || "unknown";
+  if (process.env.VERCEL) return (h.get("x-vercel-forwarded-for") || h.get("x-real-ip") || h.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
+  const xff = (h.get("x-forwarded-for") || "").split(",").map((x) => x.trim()).filter(Boolean);
+  return xff.at(-1) || h.get("x-real-ip") || "unknown";
 }
 
 export async function startSession(userId: string, kind: "CUSTOMER" | "ADMIN") {

@@ -2,6 +2,7 @@
 import { run, type ActionState } from "@/lib/admin-action";
 import { saveSetting, clearSettingsCache } from "@/lib/settings";
 import { pingRazorpay } from "@/lib/razorpay";
+import { pingCashfree } from "@/lib/cashfree";
 import { pingYoupi, youpiConfig, youpiMissing } from "@/lib/youpi";
 import { str, num, bool, isEmail, INDIAN_STATES } from "@/lib/utils";
 import { toPaise } from "@/lib/money";
@@ -38,16 +39,47 @@ export async function savePayments(_: ActionState, fd: FormData) {
   return run("settings.manage", async () => {
     const keyId = str(fd, "razorpayKeyId");
     if (keyId && !/^rzp_(test|live)_/.test(keyId)) return { error: "Razorpay key IDs start with rzp_test_ or rzp_live_." };
-    const patch: Record<string, unknown> = {
-      razorpayKeyId: keyId, prepaidDiscountPercent: Math.min(50, Math.max(0, num(fd, "prepaidDiscountPercent"))),
-      pendingPaymentMinutes: Math.max(10, num(fd, "pendingPaymentMinutes", 30)),
-    };
+    const patch: Record<string, unknown> = { razorpayKeyId: keyId };
     // Secrets: leave unchanged when the field is left blank.
     if (str(fd, "razorpayKeySecret")) patch.razorpayKeySecret = str(fd, "razorpayKeySecret");
     if (str(fd, "razorpayWebhookSecret")) patch.razorpayWebhookSecret = str(fd, "razorpayWebhookSecret");
     if (bool(fd, "clearKeys")) Object.assign(patch, { razorpayKeyId: "", razorpayKeySecret: "", razorpayWebhookSecret: "" });
     await saveSetting("payments", patch);
-    return { ok: "Payment settings saved.", log: { action: "update", entity: "settings", summary: `Payments (key ${keyId ? keyId.slice(0, 12) + "…" : "removed"})` } };
+    return { ok: "Razorpay settings saved.", log: { action: "update", entity: "settings", summary: `Razorpay (key ${keyId ? keyId.slice(0, 12) + "…" : "removed"})` } };
+  });
+}
+
+export async function savePaymentGeneral(_: ActionState, fd: FormData) {
+  return run("settings.manage", async () => {
+    const g = str(fd, "onlineGateway");
+    const onlineGateway = g === "cashfree" || g === "razorpay" ? g : "auto";
+    await saveSetting("payments", {
+      onlineGateway,
+      prepaidDiscountPercent: Math.min(50, Math.max(0, num(fd, "prepaidDiscountPercent"))),
+      pendingPaymentMinutes: Math.min(1440, Math.max(16, num(fd, "pendingPaymentMinutes", 30))),
+    });
+    return { ok: "Saved.", log: { action: "update", entity: "settings", summary: `Payments: online gateway ${onlineGateway}` } };
+  });
+}
+
+export async function saveCashfree(_: ActionState, fd: FormData) {
+  return run("settings.manage", async () => {
+    const appId = str(fd, "cashfreeAppId");
+    if (appId && !/^[A-Za-z0-9_-]{6,80}$/.test(appId)) return { error: "That does not look like a Cashfree App ID (Client ID). Copy it from Developers → API Keys." };
+    const env = str(fd, "cashfreeEnv") === "sandbox" ? "sandbox" : "production";
+    const patch: Record<string, unknown> = { cashfreeAppId: appId, cashfreeEnv: env };
+    if (str(fd, "cashfreeSecretKey")) patch.cashfreeSecretKey = str(fd, "cashfreeSecretKey");
+    if (bool(fd, "clearCashfree")) Object.assign(patch, { cashfreeAppId: "", cashfreeSecretKey: "" });
+    await saveSetting("payments", patch);
+    return { ok: "Cashfree settings saved. Press “Test connection” to check the keys.", log: { action: "update", entity: "settings", summary: `Cashfree (${env}, app ${appId ? appId.slice(0, 6) + "…" : "removed"})` } };
+  });
+}
+
+export async function testCashfree(_: ActionState) {
+  return run("settings.manage", async () => {
+    clearSettingsCache();
+    try { await pingCashfree(); return { ok: "Cashfree accepted the keys. Online payments are ready." }; }
+    catch (e) { return { error: e instanceof Error ? e.message : "Cashfree rejected the keys." }; }
   });
 }
 

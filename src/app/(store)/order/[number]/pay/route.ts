@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ number:
   if (!o || !(checkOrderToken(number, t) || (customer && o.userId === customer.id)))
     return NextResponse.json({ error: "Order not found." }, { status: 404 });
   const back = `${SITE_URL}/order/${o.number}?t=${orderToken(o.number)}`;
-  if (!rateLimit(`upi-pay:${await clientIp()}`, 10, 600_000).ok)
+  if (!(await rateLimit(`upi-pay:${await clientIp()}`, 10, 600_000)).ok)
     return NextResponse.redirect(`${back}&upi=busy`, 303);
   const r = await startUpiPayment(o.id);
   return NextResponse.redirect(r.ok ? r.url : `${back}&upi=retry`, 303);

@@ -82,11 +82,13 @@ Vercel runs the store as serverless functions, so three things live outside it: 
    | `CRON_SECRET` | another long random string |
    | `OWNER_EMAIL`, `OWNER_NAME`, `OWNER_PASSWORD` | your first admin login |
    | `PAYMENTS_MOCK` | `false` |
-   | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | optional here; can be set in Admin → Settings |
+   | `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`, `CASHFREE_ENV` | Cashfree keys; `CASHFREE_ENV` is `production` or `sandbox` (can also be set in Admin → Settings) |
+   | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | optional, only if you use Razorpay instead |
    | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | your email provider |
 5. **Deploy.** Deployments → Redeploy. The build runs `npm run vercel-build`, which creates the tables, adds the owner account and the 4 belts (only the first time), then builds the site.
 6. **Domain.** Settings → Domains → add `yourdomain.in` and `www.yourdomain.in`, then add the DNS records Vercel shows at your domain registrar. HTTPS is automatic. Update `SITE_URL` if it changed and redeploy.
-7. Continue with steps 4–10 of the server guide below (sign in at `/admin`, Razorpay keys and webhook, store details, health audit, Search Console, uptime monitor).
+   A ready-to-fill list of every variable is in `vercel.env.example`; Vercel's Environment Variables screen lets you paste a whole `.env` file at once.
+7. Continue with steps 4–10 of the server guide below (sign in at `/admin`, payment keys and webhook, store details, health audit, Search Console, uptime monitor).
 
 **Notes for Vercel**
 - Add `https://yourdomain.in/api/health` to UptimeRobot (every 5 minutes). It alerts you if the site goes down and fills the uptime strip on the Site health page.
@@ -95,6 +97,24 @@ Vercel runs the store as serverless functions, so three things live outside it: 
 - New product photos are shrunk in the browser before upload; one save can carry up to about 4 MB of photos.
 
 ---
+
+## Online payments with Cashfree
+
+“Pay online” at checkout goes through **Cashfree Payments** when its keys are set (UPI, cards, netbanking, wallets). Razorpay still works if you prefer it: Admin → Settings → Payments → *Gateway for “Pay online”*.
+
+**How it is secured**
+- The order and its amount are created on the server; the browser only receives a one-time `payment_session_id`.
+- After paying, Cashfree sends the customer to `/api/payments/cashfree/return?o=ORDER&t=TOKEN`. The token is a signed per-order secret, and the store then asks Cashfree's API (`GET /pg/orders/{id}`) for the real status. The order is marked paid only if Cashfree says `PAID` for exactly the order total in INR.
+- The webhook (`/api/payments/cashfree/webhook`) is accepted only with a valid `x-webhook-signature` (Base64 HMAC-SHA256 of timestamp + raw body with your Secret Key, as in Cashfree's own SDK). Even then it only triggers the same API check; the webhook body is never trusted for amount or status. Repeats are ignored.
+- If a payment page expires, “Pay now” on the order page opens a fresh Cashfree order (`VM-10001-R2`) for the same store order.
+- Refunds from the admin order page go through Cashfree's refund API.
+
+**Setup**
+1. Apply at cashfree.com → Payment Gateway, finish KYC and wait for activation. Until then, use the **Test** environment keys with `CASHFREE_ENV=sandbox`.
+2. Developers → API Keys: copy the App ID and Secret Key into Vercel (`CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`) or into Admin → Settings → Payments → Cashfree. Press **Test connection**.
+3. Developers → Webhooks: add `https://yourdomain.in/api/payments/cashfree/webhook` for Payment events.
+4. Developers → Whitelisting: add `https://yourdomain.in`. Cashfree blocks live checkout on domains that are not whitelisted.
+5. Switch to production keys and `CASHFREE_ENV=production`, redeploy, then place a ₹1 order and refund it from the admin.
 
 ## UPI direct to bank (YouPI)
 
@@ -185,6 +205,12 @@ deploy/              Caddyfile, backup loop
 ## Security notes
 - Passwords hashed with bcrypt (cost 12); sessions are random tokens stored hashed, in httpOnly cookies; customer and staff sessions are separate
 - Every admin page and server action checks the staff member's permission; staff sign-ins and changes are logged with IP
-- Rate limits on sign-in, sign-up, password reset, checkout, contact form and order tracking
-- Razorpay payments are confirmed only by signature check (browser) or signed webhook; amounts come from the server, never the browser
+- Rate limits on sign-in, sign-up, password reset, checkout, contact form and order tracking, stored in Postgres so they hold across all Vercel instances (emails and IPs are stored only as hashes)
+- `AUTH_SECRET` (32+ characters) is required in production; guest order links are HMAC-signed with it and compared in constant time
+- Payments are confirmed only server-side: Cashfree by its order API (after a signed webhook or the return page), Razorpay by signature check or signed webhook; amounts always come from the server, never the browser. Simulated payments are disabled on Vercel
+- Secrets set as environment variables are never copied into the database
+- Security headers: HSTS, clickjacking protection (`frame-ancestors`, `X-Frame-Options`), `nosniff`, strict referrer policy; admin pages are `noindex` and never cached
+- Sign-in redirects only go to pages on this site; CSV exports neutralise spreadsheet formulas; uploaded photos are re-encoded
+- Dependencies checked with `npm audit` (0 known vulnerabilities at the time of writing); run it again before each release
+- Admin → Site health → “Security settings” flags a missing secret, test switches left on, or a leftover `OWNER_PASSWORD`
 - Stock is locked in a database transaction at checkout so two shoppers cannot buy the last unit; unpaid online orders release stock after 30 minutes

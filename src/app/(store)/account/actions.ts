@@ -1,4 +1,5 @@
 "use server";
+import { safeNext } from "@/lib/utils";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { and, eq, gt, isNull } from "drizzle-orm";
@@ -14,7 +15,6 @@ import { SITE_URL } from "@/lib/env";
 import { INDIAN_STATES, isEmail, normPhone, str, bool } from "@/lib/utils";
 
 type State = { error?: string; ok?: string } | null;
-const safeNext = (n: string) => (n.startsWith("/") && !n.startsWith("//") ? n : "/account");
 
 async function attachCart(userId: string, email: string) {
   const cart = await getCartRecord(false);
@@ -24,7 +24,7 @@ async function attachCart(userId: string, email: string) {
 export async function login(_: State, fd: FormData): Promise<State> {
   const ip = await clientIp();
   const email = str(fd, "email").toLowerCase();
-  if (!rateLimit(`login:${ip}`, 10, 900_000).ok || !rateLimit(`login:${email}`, 6, 900_000).ok)
+  if (!(await rateLimit(`login:${ip}`, 10, 900_000)).ok || !(await rateLimit(`login:${email}`, 6, 900_000)).ok)
     return { error: "Too many attempts. Wait 15 minutes and try again." };
   const u = await findUserByEmail(email);
   if (!u || u.kind !== "CUSTOMER" || !(await verifyPassword(str(fd, "password"), u.passwordHash)))
@@ -37,7 +37,7 @@ export async function login(_: State, fd: FormData): Promise<State> {
 
 export async function register(_: State, fd: FormData): Promise<State> {
   const ip = await clientIp();
-  if (!rateLimit(`register:${ip}`, 5, 3600_000).ok) return { error: "Too many sign-ups from this network. Try again later." };
+  if (!(await rateLimit(`register:${ip}`, 5, 3600_000)).ok) return { error: "Too many sign-ups from this network. Try again later." };
   const name = str(fd, "name"), email = str(fd, "email").toLowerCase(), password = str(fd, "password");
   const phone = normPhone(str(fd, "phone"));
   if (name.length < 2) return { error: "Enter your name." };
@@ -62,7 +62,7 @@ export async function logout() {
 
 export async function forgot(_: State, fd: FormData): Promise<State> {
   const ip = await clientIp();
-  if (!rateLimit(`forgot:${ip}`, 5, 3600_000).ok) return { error: "Too many requests. Try again later." };
+  if (!(await rateLimit(`forgot:${ip}`, 5, 3600_000)).ok) return { error: "Too many requests. Try again later." };
   const email = str(fd, "email").toLowerCase();
   const u = await findUserByEmail(email);
   if (u && u.active) {

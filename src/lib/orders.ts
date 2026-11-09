@@ -9,6 +9,7 @@ import { getSettings } from "./settings";
 import { mailNewOrderAlert, mailOrderPlaced, mailOrderStatus } from "./email";
 import { STATUS_LABEL } from "./order-status";
 import { refundRazorpayPayment } from "./razorpay";
+import { refundCashfree } from "./cashfree";
 import { logError } from "./audit";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -130,6 +131,18 @@ export async function markPaid(razorpayOrderId: string, paymentId: string, sourc
   return settle(
     async (tx) => (await tx.select().from(orders).where(eq(orders.razorpayOrderId, razorpayOrderId)).for("update"))[0],
     { razorpayPaymentId: paymentId }, `Razorpay (${source})`,
+  );
+}
+
+/** Marks a Cashfree order as paid after the order status was confirmed with Cashfree's API. Safe to call twice. */
+export async function markCashfreePaid(orderId: string, cfPaymentId: string | null, source: string) {
+  return settle(
+    async (tx) => {
+      const [o] = await tx.select().from(orders).where(eq(orders.id, orderId)).for("update");
+      if (o && o.paymentMethod !== "CASHFREE") throw new Error("This order was not paid through Cashfree.");
+      return o;
+    },
+    cfPaymentId ? { cashfreePaymentId: cfPaymentId } : {}, `Cashfree (${source})`,
   );
 }
 
@@ -277,10 +290,18 @@ export async function refundOrder(input: { orderId: string; amount: number; reas
   const refundable = o.total - o.refunded;
   if (input.amount <= 0 || input.amount > refundable) throw new Error(`You can refund up to ₹${refundable / 100}.`);
   let gatewayId: string | null = null;
+  let gatewayNote = "sent to the original payment method";
   if (input.viaGateway) {
-    if (o.paymentMethod !== "RAZORPAY" || !o.razorpayPaymentId) throw new Error("This order was not paid online, so refund it manually.");
-    if (o.razorpayPaymentId.startsWith("mock_")) gatewayId = "mock_refund";
-    else gatewayId = (await refundRazorpayPayment(o.razorpayPaymentId, input.amount, input.reason)).id;
+    if (o.paymentMethod === "CASHFREE" && o.cashfreeOrderId) {
+      const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(refunds).where(eq(refunds.orderId, o.id));
+      const refundId = `${o.number.replace(/[^A-Za-z0-9]/g, "")}R${n + 1}`;
+      const r = await refundCashfree(o.cashfreeOrderId, input.amount, refundId, input.reason);
+      gatewayId = `cf:${r.cf_refund_id ?? refundId}`;
+      if (r.refund_status && r.refund_status !== "SUCCESS") gatewayNote = `started at Cashfree (${r.refund_status.toLowerCase().replace(/_/g, " ")}); the bank usually takes 5–7 working days`;
+    } else if (o.paymentMethod === "RAZORPAY" && o.razorpayPaymentId) {
+      if (o.razorpayPaymentId.startsWith("mock_")) gatewayId = "mock_refund";
+      else gatewayId = (await refundRazorpayPayment(o.razorpayPaymentId, input.amount, input.reason)).id;
+    } else throw new Error("This order was not paid through a gateway, so refund it manually and record it.");
   }
   const refundedTotal = o.refunded + input.amount;
   await db.transaction(async (tx) => {
@@ -293,7 +314,7 @@ export async function refundOrder(input: { orderId: string; amount: number; reas
     }).where(eq(orders.id, o.id));
     await tx.insert(orderEvents).values({
       orderId: o.id, actorName: input.actorName,
-      message: `Refund of ₹${(input.amount / 100).toLocaleString("en-IN")} ${gatewayId ? "sent to the original payment method" : "recorded"}. ${input.reason}`.trim(),
+      message: `Refund of ₹${(input.amount / 100).toLocaleString("en-IN")} ${gatewayId ? gatewayNote : "recorded"}. ${input.reason}`.trim(),
     });
   });
 }

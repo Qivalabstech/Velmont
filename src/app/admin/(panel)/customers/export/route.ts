@@ -1,9 +1,10 @@
+import { csvCell } from "@/lib/csv";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { getStaff } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 
-const esc = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+const esc = csvCell;
 
 export async function GET(req: Request) {
   const me = await getStaff();

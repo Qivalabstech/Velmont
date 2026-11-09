@@ -6,6 +6,8 @@ import { db, orders } from "@/db";
 import { checkOrderToken, orderToken } from "@/lib/order-token";
 import { getCustomer } from "@/lib/auth";
 import { syncYoupiOrder } from "@/lib/youpi-orders";
+import { confirmCashfreeOrder } from "@/lib/cashfree-orders";
+import { PayAgain } from "./PayAgain";
 import { inr } from "@/lib/money";
 import { OrderView } from "@/components/store/OrderView";
 
@@ -16,9 +18,9 @@ const load = (number: string) => db.query.orders.findFirst({
   with: { items: true, events: { orderBy: (e, { asc }) => [asc(e.createdAt)] } },
 });
 
-export default async function OrderPage({ params, searchParams }: { params: Promise<{ number: string }>; searchParams: Promise<{ t?: string; upi?: string }> }) {
+export default async function OrderPage({ params, searchParams }: { params: Promise<{ number: string }>; searchParams: Promise<{ t?: string; upi?: string; pay?: string }> }) {
   const { number } = await params;
-  const { t, upi } = await searchParams;
+  const { t, upi, pay } = await searchParams;
   let o = await load(number);
   if (!o) notFound();
   const customer = await getCustomer();
@@ -30,6 +32,12 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
     o = (await load(number))!;
   }
 
+  // Cashfree order not marked paid yet: ask Cashfree directly (covers a late or missed webhook).
+  if (o.paymentMethod === "CASHFREE" && o.status === "PENDING_PAYMENT" && o.paymentStatus === "PENDING" && o.cashfreeOrderId) {
+    if ((await confirmCashfreeOrder(o, "order page")) === "paid") o = (await load(number))!;
+  }
+
+  const cfPayable = o.paymentMethod === "CASHFREE" && o.status === "PENDING_PAYMENT" && o.paymentStatus === "PENDING";
   const paid = o.status !== "PENDING_PAYMENT" && o.status !== "CANCELLED";
   const upiVerifying = o.paymentMethod === "UPI" && o.paymentStatus === "VERIFYING";
   const upiPayable = o.paymentMethod === "UPI" && o.status === "PENDING_PAYMENT" && o.paymentStatus === "PENDING";
@@ -47,6 +55,14 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
         <h1 className="display">{title}</h1>
         <p>{text}</p>
       </header>
+      {cfPayable && (
+        <section className="panel" style={{ marginBottom: 24, display: "grid", gap: 12, maxWidth: 560 }}>
+          {pay === "failed" && <div className="alert bad" role="alert">The payment did not go through. No money was taken for this attempt. You can try again below.</div>}
+          {pay === "pending" && <div className="alert info" role="status">The payment is not complete yet. If money left your account, this page will update within a few minutes, so do not pay twice.</div>}
+          <p style={{ margin: 0 }}>Pay <b>{inr(o.total)}</b> by UPI, card, netbanking or wallet. Your belt is reserved for a short while.</p>
+          <PayAgain number={o.number} token={orderToken(o.number)} label={`Pay ${inr(o.total)}`} />
+        </section>
+      )}
       {upiPayable && (
         <section className="panel" style={{ marginBottom: 24, display: "grid", gap: 12, maxWidth: 560 }}>
           {upi === "retry" && <div className="alert bad" role="alert">The UPI payment page did not open. Please try again in a minute.</div>}

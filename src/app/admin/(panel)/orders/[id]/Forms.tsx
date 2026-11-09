@@ -62,14 +62,14 @@ export function NoteForm({ id }: { id: string }) {
   );
 }
 
-export function RefundForm({ id, max, online }: { id: string; max: number; online: boolean }) {
+export function RefundForm({ id, max, online, gateway = "Razorpay" }: { id: string; max: number; online: boolean; gateway?: string }) {
   return (
     <AForm action={refund} className="fgrid">
       <input type="hidden" name="id" value={id} />
       <div className="field"><label htmlFor="r-amt">Amount (₹)</label><input id="r-amt" name="amount" type="number" step="0.01" min="1" max={max} defaultValue={max} className="input" /></div>
       <div className="field"><label htmlFor="r-mode">How</label>
         <select id="r-mode" name="mode" className="select" defaultValue={online ? "gateway" : "manual"}>
-          {online && <option value="gateway">Refund through Razorpay</option>}
+          {online && <option value="gateway">Refund through {gateway}</option>}
           <option value="manual">Already refunded (bank / UPI)</option>
         </select></div>
       <div className="field full"><label htmlFor="r-why">Reason</label><input id="r-why" name="reason" className="input" placeholder="e.g. Size exchange not possible" /></div>

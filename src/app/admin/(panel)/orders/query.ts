@@ -26,7 +26,7 @@ export function orderWhere(f: OrderFilters, includeTab = true) {
     w.push(or(ilike(orders.number, q), ilike(orders.email, q), ilike(orders.phone, q), sql`${orders.shippingAddress}->>'name' ilike ${q}`, ilike(orders.awb, q))!);
   }
   if (f.payment) w.push(eq(orders.paymentStatus, f.payment as PaymentStatus));
-  if (f.method === "COD" || f.method === "RAZORPAY" || f.method === "UPI") w.push(eq(orders.paymentMethod, f.method));
+  if (f.method === "COD" || f.method === "RAZORPAY" || f.method === "UPI" || f.method === "CASHFREE") w.push(eq(orders.paymentMethod, f.method));
   if (f.from) w.push(gte(orders.createdAt, new Date(`${f.from}T00:00:00+05:30`)));
   if (f.to) w.push(lte(orders.createdAt, new Date(`${f.to}T23:59:59+05:30`)));
   return w.length ? and(...w) : undefined;
