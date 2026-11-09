@@ -6,10 +6,12 @@ import { findUserByEmail, verifyPassword, startSession, endSession, clientIp, re
 import { rateLimit } from "@/lib/rate-limit";
 import { audit } from "@/lib/audit";
 import { str } from "@/lib/utils";
+import { authSecretMissing, AUTH_SECRET_MISSING } from "@/lib/secret";
 
 type S = { error?: string; ok?: string } | null;
 
 export async function adminLogin(_: S, fd: FormData): Promise<S> {
+  if (authSecretMissing()) return { error: AUTH_SECRET_MISSING };
   const ip = await clientIp();
   const email = str(fd, "email").toLowerCase();
   if (!(await rateLimit(`alogin:${ip}`, 8, 900_000)).ok || !(await rateLimit(`alogin:${email}`, 5, 900_000)).ok)

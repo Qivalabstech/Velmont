@@ -12,6 +12,7 @@ import { startCashfreePayment } from "@/lib/cashfree-orders";
 import { youpiReady } from "@/lib/youpi";
 import { startUpiPayment } from "@/lib/youpi-start";
 import { orderToken } from "@/lib/order-token";
+import { authSecretMissing } from "@/lib/secret";
 import { rateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/audit";
 import { INDIAN_STATES, normPhone } from "@/lib/utils";
@@ -52,6 +53,7 @@ export type PlaceResult =
   | { ok: false; error: string; field?: string };
 
 export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
+  if (authSecretMissing()) return { ok: false, error: "Checkout is paused while the store finishes setting up. Please try again shortly." };
   const ip = await clientIp();
   if (!(await rateLimit(`checkout:${ip}`, 10, 600_000)).ok) return { ok: false, error: "Too many attempts. Wait a few minutes and try again." };
   const parsed = Input.safeParse(raw);

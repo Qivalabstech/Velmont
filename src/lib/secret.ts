@@ -13,3 +13,8 @@ export function authSecret(): string {
 }
 
 export const authSecretOk = () => (process.env.AUTH_SECRET || "").length >= 32;
+
+/** Plain-English message shown on sign-in and checkout when the secret is missing, instead of a crash. */
+export const AUTH_SECRET_MISSING =
+  "This site is not fully set up: AUTH_SECRET is missing. In Vercel open Settings → Environment Variables, add AUTH_SECRET (32+ characters) for Production, then redeploy.";
+export const authSecretMissing = () => IS_PROD && process.env.NEXT_PHASE !== "phase-production-build" && !authSecretOk();

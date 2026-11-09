@@ -1,5 +1,6 @@
 "use server";
 import { safeNext } from "@/lib/utils";
+import { authSecretMissing, AUTH_SECRET_MISSING } from "@/lib/secret";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { and, eq, gt, isNull } from "drizzle-orm";
@@ -22,6 +23,7 @@ async function attachCart(userId: string, email: string) {
 }
 
 export async function login(_: State, fd: FormData): Promise<State> {
+  if (authSecretMissing()) return { error: AUTH_SECRET_MISSING };
   const ip = await clientIp();
   const email = str(fd, "email").toLowerCase();
   if (!(await rateLimit(`login:${ip}`, 10, 900_000)).ok || !(await rateLimit(`login:${email}`, 6, 900_000)).ok)
@@ -36,6 +38,7 @@ export async function login(_: State, fd: FormData): Promise<State> {
 }
 
 export async function register(_: State, fd: FormData): Promise<State> {
+  if (authSecretMissing()) return { error: AUTH_SECRET_MISSING };
   const ip = await clientIp();
   if (!(await rateLimit(`register:${ip}`, 5, 3600_000)).ok) return { error: "Too many sign-ups from this network. Try again later." };
   const name = str(fd, "name"), email = str(fd, "email").toLowerCase(), password = str(fd, "password");
