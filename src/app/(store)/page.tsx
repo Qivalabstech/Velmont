@@ -9,6 +9,8 @@ import { SizeGuide } from "@/components/store/SizeGuide";
 import { JsonLd } from "@/components/store/JsonLd";
 import { organizationLd, websiteLd, faqLd } from "@/lib/seo";
 
+export const revalidate = 60;
+
 export const metadata = { alternates: { canonical: "/" } };
 
 export default async function Home() {
@@ -37,7 +39,7 @@ export default async function Home() {
             <div className="specs mono"><span>Full-grain cowhide</span><span>1.5 in width</span><span>Sizes 30–40</span></div>
           </div>
         </div>
-        <div className="giant" aria-hidden="true">{[...name].map((ch, i) => <span key={i} style={{ animationDelay: `${i * 0.08}s` }}>{ch}</span>)}</div>
+        <div className="giant" aria-hidden="true">{[...name].map((ch, i) => <span key={i} style={{ animationDelay: `${i * 0.05}s` }}>{ch}</span>)}</div>
       </section>
 
       <Band rowOne={c.bandRowOne} rowTwo={c.bandRowTwo} image="/img/solana-detail.webp" caption="The Solana · detail" />

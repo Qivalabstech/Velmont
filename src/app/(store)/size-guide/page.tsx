@@ -3,6 +3,8 @@ import { SizeGuide } from "@/components/store/SizeGuide";
 import { JsonLd } from "@/components/store/JsonLd";
 import { faqLd } from "@/lib/seo";
 
+export const revalidate = 60;
+
 export const metadata: Metadata = {
   title: "Belt size guide",
   description: "How to choose your belt size: add 2 inches to your trouser waist. Size chart for VELMONT belts 30 to 40 with centre-hole and length in inches and cm.",

@@ -4,6 +4,8 @@ import { listFaqs } from "@/lib/catalog";
 import { JsonLd } from "@/components/store/JsonLd";
 import { faqLd, breadcrumbLd } from "@/lib/seo";
 
+export const revalidate = 60;
+
 export const metadata: Metadata = {
   title: "Frequently asked questions",
   description: "Answers about belt sizing, leather, delivery, exchanges, cash on delivery and care for VELMONT belts.",

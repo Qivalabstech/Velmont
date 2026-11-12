@@ -1,9 +1,11 @@
 "use client";
+import { useCart } from "@/components/store/CartProvider";
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { submitReview } from "@/app/(store)/actions";
 
-export function ReviewForm({ productId, signedIn, slug }: { productId: string; signedIn: boolean; slug: string }) {
+export function ReviewForm({ productId, slug }: { productId: string; slug: string }) {
+  const { signedIn } = useCart();
   const [open, setOpen] = useState(false);
   const [rating, setRating] = useState(0);
   const [state, action, pending] = useActionState(submitReview, null);

@@ -8,6 +8,9 @@ import { JsonLd } from "@/components/store/JsonLd";
 import { breadcrumbLd } from "@/lib/seo";
 import { formatDate } from "@/lib/utils";
 
+export const revalidate = 60;
+export function generateStaticParams() { return []; }
+
 const get = (slug: string) => db.query.pages.findFirst({ where: and(eq(pages.slug, slug), eq(pages.published, true)) });
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {

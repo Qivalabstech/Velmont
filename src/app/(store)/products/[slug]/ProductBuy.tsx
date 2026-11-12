@@ -3,25 +3,26 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { addToCart, toggleWishlist } from "@/app/(store)/actions";
+import { addToCart, toggleWishlist, productLive } from "@/app/(store)/actions";
 import { useCart } from "@/components/store/CartProvider";
 import { HeartIcon } from "@/components/store/Icons";
 import { inr, percentOff } from "@/lib/money";
 
 type V = { id: string; size: string; stock: number; active: boolean };
 
-export function ProductBuy({ product, images, variants, rating, reviewCount, saved, signedIn, perks, children }: {
+export function ProductBuy({ product, images, variants: cachedVariants, rating, reviewCount, perks, children }: {
   product: { id: string; name: string; slug: string; price: number; mrp: number; tagline: string; badge: string | null };
-  images: { url: string; alt: string }[]; variants: V[]; rating: number; reviewCount: number; saved: boolean; signedIn: boolean;
+  images: { url: string; alt: string }[]; variants: V[]; rating: number; reviewCount: number;
   perks: { dispatch: string; exchange: number; cod: boolean }; children: React.ReactNode;
 }) {
-  const { setCart, setOpen, toast } = useCart();
+  const { setCart, setOpen, toast, signedIn } = useCart();
+  const [variants, setVariants] = useState(cachedVariants);
   const router = useRouter();
   const [img, setImg] = useState(0);
   const [zoom, setZoom] = useState(false);
   const firstAvail = variants.find((v) => v.active && v.stock > 0 && v.size === "34") ?? variants.find((v) => v.active && v.stock > 0);
   const [sel, setSel] = useState<string | null>(firstAvail?.id ?? null);
-  const [wish, setWish] = useState(saved);
+  const [wish, setWish] = useState(false);
   const [pending, start] = useTransition();
   const [sticky, setSticky] = useState(false);
   const buyRef = useRef<HTMLDivElement>(null);
@@ -29,6 +30,22 @@ export function ProductBuy({ product, images, variants, rating, reviewCount, sav
   const soldOut = !variants.some((x) => x.active && x.stock > 0);
   const off = percentOff(product.price, product.mrp);
 
+  // The page comes from the cache; read current stock and the wishlist state for this visitor.
+  useEffect(() => {
+    let live = true;
+    productLive(product.id).then((r) => {
+      if (!live) return;
+      setWish(r.saved);
+      setVariants((cur) => cur.map((x) => { const n = r.variants.find((y) => y.id === x.id); return n ? { ...x, stock: n.stock, active: n.active } : x; }));
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [product.id]);
+  useEffect(() => {
+    if (sel && !variants.some((x) => x.id === sel && x.active && x.stock > 0)) {
+      const next = variants.find((x) => x.active && x.stock > 0 && x.size === "34") ?? variants.find((x) => x.active && x.stock > 0);
+      setSel(next?.id ?? null);
+    }
+  }, [variants]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = buyRef.current;
     if (!el) return;

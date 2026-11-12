@@ -12,8 +12,8 @@ const NAV = [
   { href: "/track", label: "Track order" },
 ];
 
-export function Header({ storeName, announcements, signedIn }: { storeName: string; announcements: string[]; signedIn: boolean }) {
-  const { cart, setOpen } = useCart();
+export function Header({ storeName, announcements }: { storeName: string; announcements: string[] }) {
+  const { cart, setOpen, signedIn, loaded } = useCart();
   const path = usePathname();
   const router = useRouter();
   const [menu, setMenu] = useState(false);
@@ -50,7 +50,7 @@ export function Header({ storeName, announcements, signedIn }: { storeName: stri
             <Link className="icon-btn hide-sm" href={signedIn ? "/account" : "/account/login"} aria-label={signedIn ? "Your account" : "Sign in"}><UserIcon /></Link>
             <button className="icon-btn bag-btn" onClick={() => setOpen(true)} aria-label={`Open bag, ${cart.count} items`}>
               <BagIcon /><span className="bag-label">Bag</span>
-              <span className={`bag-count${bump ? " bump" : ""}`}>{cart.count}</span>
+              <span className={`bag-count${bump ? " bump" : ""}`} style={loaded ? undefined : { opacity: 0 }}>{cart.count}</span>
             </button>
             <button className={`menu-btn${menu ? " on" : ""}`} aria-label={menu ? "Close menu" : "Open menu"} aria-expanded={menu} aria-controls="mnav" onClick={() => setMenu((v) => !v)}>
               <span></span><span></span>

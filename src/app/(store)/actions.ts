@@ -14,6 +14,24 @@ export async function fetchCart(): Promise<CartSummary> {
   return getCartSummary();
 }
 
+/** Per-visitor data for the cached storefront pages: bag contents and whether someone is signed in. */
+export async function fetchSession(): Promise<{ cart: CartSummary; signedIn: boolean }> {
+  const [cart, customer] = await Promise.all([getCartSummary(), getCustomer()]);
+  return { cart, signedIn: !!customer };
+}
+
+/** Live stock and wishlist state for a product page that was served from the cache. */
+export async function productLive(productId: string) {
+  const [vs, customer] = await Promise.all([
+    db.select({ id: variants.id, stock: variants.stock, active: variants.active }).from(variants).where(eq(variants.productId, productId)),
+    getCustomer(),
+  ]);
+  const saved = customer
+    ? !!(await db.query.wishlistItems.findFirst({ where: and(eq(wishlistItems.userId, customer.id), eq(wishlistItems.productId, productId)) }))
+    : false;
+  return { variants: vs, saved, signedIn: !!customer };
+}
+
 export async function addToCart(variantId: string, qty = 1): Promise<Res> {
   const v = await db.query.variants.findFirst({ where: eq(variants.id, variantId), with: { product: true } });
   if (!v || !v.active || v.product.status !== "ACTIVE") return { ok: false, error: "This size is not available." };

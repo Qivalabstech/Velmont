@@ -17,6 +17,7 @@ export async function run(
     if ("error" in r) return { error: r.error, at: Date.now() };
     if (r.log) await audit({ id: staff.id, name: staff.name }, r.log.action, r.log.entity, r.log.id ?? null, r.log.summary);
     (r.revalidate || []).forEach((p) => revalidatePath(p));
+    revalidatePath("/", "layout"); // storefront pages are cached; an admin change shows on the site at once
     revalidatePath("/admin", "layout"); // fresh data in the same response, so saved forms show saved values
 
     return { ok: r.ok, at: Date.now() };

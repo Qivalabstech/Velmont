@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, eq } from "drizzle-orm";
 import { getProduct, listProducts } from "@/lib/catalog";
 import { getSettings } from "@/lib/settings";
-import { getCustomer } from "@/lib/auth";
-import { db, wishlistItems } from "@/db";
 import { ProductCard } from "@/components/store/ProductCard";
 import { JsonLd } from "@/components/store/JsonLd";
 import { SizeGuide } from "@/components/store/SizeGuide";
@@ -15,6 +12,10 @@ import { ReviewForm } from "./ReviewForm";
 import { formatDate } from "@/lib/utils";
 
 type P = Promise<{ slug: string }>;
+
+// Served from the cache and refreshed every minute (and at once when the admin saves a change).
+export const revalidate = 60;
+export function generateStaticParams() { return []; }
 
 export async function generateMetadata({ params }: { params: P }): Promise<Metadata> {
   const p = await getProduct((await params).slug);
@@ -31,10 +32,7 @@ export default async function ProductPage({ params }: { params: P }) {
   const { slug } = await params;
   const p = await getProduct(slug);
   if (!p) notFound();
-  const [s, related, customer] = await Promise.all([getSettings(), listProducts({ excludeId: p.id, limit: 4 }), getCustomer()]);
-  const saved = customer
-    ? !!(await db.query.wishlistItems.findFirst({ where: and(eq(wishlistItems.userId, customer.id), eq(wishlistItems.productId, p.id)) }))
-    : false;
+  const [s, related] = await Promise.all([getSettings(), listProducts({ excludeId: p.id, limit: 4 })]);
   const dist = [5, 4, 3, 2, 1].map((r) => ({ r, n: p.reviews.filter((x) => x.rating === r).length }));
   const paras = p.description.split(/\n{2,}/).filter(Boolean);
 
@@ -51,7 +49,7 @@ export default async function ProductPage({ params }: { params: P }) {
         product={{ id: p.id, name: p.name, slug: p.slug, price: p.price, mrp: p.mrp, tagline: p.tagline, badge: p.badge }}
         images={p.images.map((i) => ({ url: i.url, alt: i.alt || p.name }))}
         variants={p.variants.map((v) => ({ id: v.id, size: v.size, stock: v.stock, active: v.active }))}
-        rating={p.rating} reviewCount={p.reviews.length} saved={saved} signedIn={!!customer}
+        rating={p.rating} reviewCount={p.reviews.length}
         perks={{ dispatch: s.shipping.dispatchDays, exchange: s.shipping.exchangeDays, cod: s.shipping.codEnabled }}
       >
         <div className="acc">
@@ -105,7 +103,7 @@ export default async function ProductPage({ params }: { params: P }) {
               ))}</div>
             </>
           ) : <p className="muted">No reviews yet. Bought this belt? Tell others how it fits and wears.</p>}
-          <ReviewForm productId={p.id} signedIn={!!customer} slug={p.slug} />
+          <ReviewForm productId={p.id} slug={p.slug} />
         </div>
         <div className="rev-list">
           {p.reviews.map((r) => (

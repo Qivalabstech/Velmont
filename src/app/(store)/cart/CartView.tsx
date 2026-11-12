@@ -36,8 +36,9 @@ export function CouponBox() {
 }
 
 export function CartView() {
-  const { cart } = useCart();
+  const { cart, loaded } = useCart();
   const t = cart.totals;
+  if (!loaded) return <div className="empty-state" style={{ marginBottom: 80 }} aria-busy="true"><span className="spinner" /><span>Loading your bag…</span></div>;
   if (!cart.lines.length || !t) return (
     <div className="empty-state" style={{ marginBottom: 80 }}>
       <span>Your bag is empty.</span><Link className="btn solid" href="/shop">Shop belts</Link>

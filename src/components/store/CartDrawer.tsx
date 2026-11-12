@@ -44,7 +44,7 @@ export function CartLines({ compact = false }: { compact?: boolean }) {
 }
 
 export function CartDrawer() {
-  const { cart, open, setOpen } = useCart();
+  const { cart, open, setOpen, loaded } = useCart();
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     window.addEventListener("keydown", k);
@@ -57,7 +57,7 @@ export function CartDrawer() {
       <aside className={`drawer${open ? " on" : ""}`} aria-label="Your bag" aria-hidden={!open} inert={!open}>
         <div className="dh"><h2>Your bag</h2><button className="x" onClick={() => setOpen(false)} aria-label="Close bag">×</button></div>
         <div className="items">
-          {cart.lines.length ? <CartLines compact /> : (
+          {!loaded ? <div className="empty" aria-busy="true"><span className="spinner" /></div> : cart.lines.length ? <CartLines compact /> : (
             <div className="empty-state" style={{ marginTop: 20 }}>
               <span>Your bag is empty.</span>
               <Link className="btn solid" href="/shop" onClick={() => setOpen(false)}>Shop belts</Link>
