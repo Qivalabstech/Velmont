@@ -1,3 +1,4 @@
+import { shiprocketConfig } from "@/lib/shiprocket";
 import Link from "next/link";
 import { and, desc, inArray, sql } from "drizzle-orm";
 import { db, orders } from "@/db";
@@ -51,7 +52,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<O
         {(f.q || f.method || f.payment || f.from || f.to) && <Link className="btn sm" href={f.tab ? `/admin/orders?tab=${f.tab}` : "/admin/orders"}>Clear</Link>}
       </form>
       <Card flush>
-        <BulkBar enabled={canManage} formId="bulk">
+        <BulkBar enabled={canManage} formId="bulk" shiprocket={(await shiprocketConfig()).enabled}>
           <div className="tbl-wrap"><table className="tbl">
             <thead><tr>{canManage && <th style={{ width: 32 }}><span className="sr-only">Select</span></th>}<th>Order</th><th className="hide-sm">Date</th><th>Customer</th><th className="hide-sm">Items</th><th>Status</th><th className="hide-sm">Payment</th><th className="r">Total</th></tr></thead>
             <tbody>

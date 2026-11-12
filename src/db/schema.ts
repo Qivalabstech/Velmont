@@ -215,6 +215,14 @@ export const orders = pgTable("orders", {
   courier: text("courier"),
   awb: text("awb"),
   trackingUrl: text("tracking_url"),
+  // Shiprocket: created automatically when an order is placed (see src/lib/shiprocket-orders.ts)
+  shiprocketOrderId: text("shiprocket_order_id"),
+  shiprocketShipmentId: text("shiprocket_shipment_id"),
+  shippingLabelUrl: text("shipping_label_url"),
+  shippingStatus: text("shipping_status"), // courier's latest status text, e.g. "IN TRANSIT"
+  pickupScheduledFor: text("pickup_scheduled_for"),
+  shippingSyncedAt: timestamp("shipping_synced_at", { withTimezone: true }),
+  shippingError: text("shipping_error"),
   stockReleased: boolean("stock_released").notNull().default(false),
   createdAt: createdAt(),
   placedAt: timestamp("placed_at", { withTimezone: true }),

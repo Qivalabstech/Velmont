@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { AForm, Submit, ConfirmSubmit } from "@/components/admin/Form";
-import { changeStatus, addNote, refund, editAddress, saveInternalNote, markCodCollected, updateTracking, confirmUpi, rejectUpi } from "../actions";
+import { changeStatus, addNote, refund, editAddress, saveInternalNote, markCodCollected, updateTracking, confirmUpi, rejectUpi, shiprocketAction } from "../actions";
 import { STATUS_LABEL } from "@/lib/order-status";
 import { INDIAN_STATES } from "@/lib/utils";
 import type { OrderStatus, ShippingAddress } from "@/db/schema";
@@ -142,6 +142,34 @@ export function UpiReviewForm({ id, utr, amount }: { id: string; utr: string; am
           </div>
         </AForm>
       )}
+    </div>
+  );
+}
+
+export function ShiprocketPanel(p: {
+  id: string; shipmentId: string | null; srOrderId: string | null; awb: string | null; courier: string | null;
+  label: string | null; trackUrl: string | null; status: string | null; pickup: string | null; error: string | null;
+  synced: string | null; canShip: boolean;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      {p.error && <div className="alert bad" role="alert">Last Shiprocket step failed: {p.error}</div>}
+      <dl className="kv">
+        <dt>Shipment</dt><dd>{p.shipmentId ? <>#{p.shipmentId} <span className="sub">(order {p.srOrderId})</span></> : "Not sent yet"}</dd>
+        <dt>Courier</dt><dd>{p.courier && p.awb ? <>{p.courier} · <code>{p.awb}</code></> : "Not booked"}</dd>
+        {p.pickup && <><dt>Pickup</dt><dd>{p.pickup}</dd></>}
+        {p.status && <><dt>Courier status</dt><dd>{p.status}{p.synced && <span className="sub"> · checked {p.synced}</span>}</dd></>}
+      </dl>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {p.label && <a className="btn sm" href={p.label} target="_blank" rel="noopener noreferrer">Download label</a>}
+        {p.trackUrl && <a className="btn sm" href={p.trackUrl} target="_blank" rel="noopener noreferrer">Courier tracking page</a>}
+      </div>
+      <AForm action={shiprocketAction} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input type="hidden" name="id" value={p.id} />
+        {p.canShip && !p.shipmentId && <Submit className="btn sm solid" name="do" value="send">Send to Shiprocket</Submit>}
+        {p.canShip && !p.awb && <Submit className="btn sm" name="do" value="book">{p.shipmentId ? "Book courier & pickup" : "Send & book courier"}</Submit>}
+        {p.awb && <Submit className="btn sm" name="do" value="track" pendingText="Checking…">Refresh tracking</Submit>}
+      </AForm>
     </div>
   );
 }

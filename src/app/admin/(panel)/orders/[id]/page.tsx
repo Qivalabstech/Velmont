@@ -9,14 +9,23 @@ import { inr } from "@/lib/money";
 import { STATUS_LABEL, STATUS_TONE, PAYMENT_LABEL, PAYMENT_TONE, NEXT_STATUSES, COURIERS, METHOD_LABEL } from "@/lib/order-status";
 import { formatDate } from "@/lib/utils";
 import { PageHead, Card, Pill } from "@/components/admin/ui";
-import { StatusForm, NoteForm, RefundForm, AddressForm, InternalNote, CodForm, TrackingForm, UpiReviewForm } from "./Forms";
+import { StatusForm, NoteForm, RefundForm, AddressForm, InternalNote, CodForm, TrackingForm, UpiReviewForm, ShiprocketPanel } from "./Forms";
+import { shiprocketConfig } from "@/lib/shiprocket";
+import { syncTracking } from "@/lib/shiprocket-orders";
 
 export const metadata = { title: "Order" };
 
 export default async function OrderDetail({ params }: { params: Promise<{ id: string }> }) {
   const me = await requireStaff("orders.view");
-  const o = await getOrderFull((await params).id);
+  const orderId = (await params).id;
+  let o = await getOrderFull(orderId);
   if (!o) notFound();
+  const sr = await shiprocketConfig();
+  // Opening an order in transit refreshes its tracking (at most every 30 minutes), in case a webhook was missed.
+  if (sr.enabled && o.awb && o.shiprocketShipmentId && ["CONFIRMED", "PACKED", "SHIPPED", "OUT_FOR_DELIVERY"].includes(o.status)
+      && (!o.shippingSyncedAt || Date.now() - o.shippingSyncedAt.getTime() > 30 * 60_000)) {
+    try { await Promise.race([syncTracking(o, "order opened"), new Promise((r) => setTimeout(r, 6000))]); o = (await getOrderFull(orderId))!; } catch { /* shown on next sync */ }
+  }
   const [{ n: prevOrders }] = await db.select({ n: sql<number>`count(*)::int` }).from(orders)
     .where(and(eq(orders.email, o.email), ne(orders.id, o.id), sql`${orders.status} not in ('PENDING_PAYMENT','CANCELLED')`));
   const a = o.shippingAddress;
@@ -58,6 +67,14 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             </div>
           </Card>
 
+          {sr.enabled && (o.shiprocketShipmentId || ["PLACED", "CONFIRMED", "PACKED"].includes(o.status)) && (
+            <Card title="Shipping (Shiprocket)">
+              <ShiprocketPanel id={o.id} shipmentId={o.shiprocketShipmentId} srOrderId={o.shiprocketOrderId} awb={o.awb} courier={o.courier}
+                label={o.shippingLabelUrl} trackUrl={o.trackingUrl} status={o.shippingStatus} pickup={o.pickupScheduledFor} error={o.shippingError}
+                synced={o.shippingSyncedAt ? formatDate(o.shippingSyncedAt, true) : null}
+                canShip={canManage && ["PLACED", "CONFIRMED", "PACKED"].includes(o.status)} />
+            </Card>
+          )}
           {canManage && next.length > 0 && (
             <Card title="Update status" sub="Ticking “Notify customer” sends an email and updates their tracking page.">
               <StatusForm id={o.id} current={o.status} next={next} couriers={COURIERS.map((c) => c.name)} courier={o.courier || ""} awb={o.awb || ""} trackingUrl={o.trackingUrl || ""} />

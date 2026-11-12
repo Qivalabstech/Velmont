@@ -25,6 +25,7 @@ async function daily() {
     await db.delete(rateLimits).where(lt(rateLimits.resetAt, new Date()));
     await db.delete(gatewayDeliveries).where(lt(gatewayDeliveries.createdAt, ago(90)));
   } catch (e) { await logError("scheduler.cleanup", e); }
+  try { const { shiprocketDaily } = await import("./shiprocket-orders"); await shiprocketDaily(); } catch (e) { await logError("scheduler.shiprocket", e); }
   try { await runSiteAudit("nightly"); } catch (e) { await logError("scheduler.audit", e); }
   if (pagespeedAvailable()) {
     try { await runPageSpeed("mobile", "/", "nightly"); } catch (e) { await logError("scheduler.pagespeed", e); }

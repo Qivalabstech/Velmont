@@ -1,5 +1,5 @@
 // Scheduled jobs. Vercel calls GET /api/cron daily (see vercel.json) with "Authorization: Bearer CRON_SECRET".
-// Other schedulers can call /api/cron?job=daily&token=CRON_SECRET. Jobs: daily (default), audit, uptime, release.
+// Other schedulers can call /api/cron?job=daily&token=CRON_SECRET. Jobs: daily (default), audit, uptime, release, shipping (Shiprocket retries + tracking).
 import { releaseExpiredOrders } from "@/lib/orders";
 import { runSiteAudit } from "@/lib/health/audit";
 import { recordUptime } from "@/lib/health/live";
@@ -17,6 +17,7 @@ export async function GET(req: Request) {
   if (job === "audit") { const r = await runSiteAudit("cron"); return Response.json({ seo: r.seo.score, aeo: r.aeo.score, geo: r.geo.score }); }
   if (job === "uptime") return Response.json(await recordUptime("cron"));
   if (job === "release") return Response.json({ released: await releaseExpiredOrders() });
+  if (job === "shipping") { const { shiprocketDaily } = await import("@/lib/shiprocket-orders"); return Response.json(await shiprocketDaily()); }
   await runDailyNow();
   return Response.json({ ok: true, job: "daily" });
 }

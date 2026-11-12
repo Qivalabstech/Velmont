@@ -30,6 +30,20 @@ export const DEFAULT_SETTINGS = {
     deliveryDays: "3–7 business days",
     exchangeDays: 7,
   },
+  // Shiprocket: creates shipments, books couriers and tracks deliveries automatically.
+  shiprocket: {
+    enabled: false,
+    email: "", // API user created in Shiprocket → Settings → API (not your normal login)
+    password: "",
+    pickupLocation: "", // pickup address nickname exactly as in Shiprocket → Settings → Pickup Addresses
+    autoCreate: true, // send each placed order to Shiprocket
+    autoAssign: true, // book the courier Shiprocket recommends and schedule pickup
+    webhookToken: "", // sent by Shiprocket as x-api-key on tracking webhooks
+    weightPerItemKg: 0.35,
+    lengthCm: 32,
+    breadthCm: 12,
+    heightCm: 6,
+  },
   payments: {
     // Which gateway handles "Pay online". "auto" uses Cashfree when its keys are set, otherwise Razorpay.
     onlineGateway: "auto" as "auto" | "cashfree" | "razorpay",
@@ -114,6 +128,9 @@ export async function getSettings(): Promise<Settings> {
   if (process.env.CASHFREE_APP_ID) merged.payments.cashfreeAppId = process.env.CASHFREE_APP_ID;
   if (process.env.CASHFREE_SECRET_KEY) merged.payments.cashfreeSecretKey = process.env.CASHFREE_SECRET_KEY;
   if (process.env.CASHFREE_ENV === "sandbox" || process.env.CASHFREE_ENV === "production") merged.payments.cashfreeEnv = process.env.CASHFREE_ENV;
+  if (process.env.SHIPROCKET_EMAIL) merged.shiprocket.email = process.env.SHIPROCKET_EMAIL;
+  if (process.env.SHIPROCKET_PASSWORD) merged.shiprocket.password = process.env.SHIPROCKET_PASSWORD;
+  if (process.env.SHIPROCKET_WEBHOOK_TOKEN) merged.shiprocket.webhookToken = process.env.SHIPROCKET_WEBHOOK_TOKEN;
   if (process.env.YOUPI_API_URL) merged.payments.youpiApiUrl = process.env.YOUPI_API_URL;
   if (process.env.YOUPI_MERCHANT_ID) merged.payments.youpiMerchantId = process.env.YOUPI_MERCHANT_ID;
   if (process.env.YOUPI_MERCHANT_API_KEY) merged.payments.youpiApiKey = process.env.YOUPI_MERCHANT_API_KEY;

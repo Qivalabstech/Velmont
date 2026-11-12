@@ -96,6 +96,16 @@ export async function bulkStatus(_: ActionState, fd: FormData) {
     const ids = fd.getAll("ids").map(String).filter(Boolean);
     const status = str(fd, "status") as OrderStatus;
     if (!ids.length) return { error: "Tick at least one order." };
+    if ((status as string) === "SHIPROCKET") {
+      if (ids.length > 10) return { error: "Send up to 10 orders to Shiprocket at a time." };
+      const { shipWithShiprocket } = await import("@/lib/shiprocket-orders");
+      const results = [];
+      for (const id of ids) results.push(await shipWithShiprocket(id, { book: true, actorName: me.name }));
+      const ok = results.filter((r) => r.step === "booked" || r.step === "created").length;
+      const failed = results.filter((r) => r.step === "failed");
+      const msg = `${ok} of ${ids.length} orders booked with Shiprocket.${failed.length ? ` ${failed.length} failed: ${failed[0].message}` : ""}`;
+      return ok ? { ok: msg, log: { action: "bulk_shiprocket", entity: "order", summary: msg }, revalidate: ["/admin/orders"] } : { error: msg };
+    }
     if (!["CONFIRMED", "PACKED"].includes(status)) return { error: "Bulk updates can mark orders confirmed or packed." };
     const list = await db.select().from(orders).where(inArray(orders.id, ids));
     let n = 0;
@@ -127,5 +137,24 @@ export async function rejectUpi(_: ActionState, fd: FormData) {
     await rejectUpiPayment(id, { reason: str(fd, "reason"), actorName: me.name, notify: bool(fd, "notify") });
     const o = await db.query.orders.findFirst({ where: eq(orders.id, id) });
     return { ok: `Marked as not received. ${o?.number} is cancelled and its stock is back.`, log: { action: "upi_reject", entity: "order", id, summary: `${o?.number}: UPI payment not received` }, revalidate: ["/admin/orders"] };
+  });
+}
+
+/** Shiprocket: send the order, book a courier, or refresh tracking. */
+export async function shiprocketAction(_: ActionState, fd: FormData) {
+  return run("orders.manage", async (me) => {
+    const id = str(fd, "id");
+    const what = str(fd, "do");
+    const { shipWithShiprocket, syncTracking } = await import("@/lib/shiprocket-orders");
+    const o = await db.query.orders.findFirst({ where: eq(orders.id, id) });
+    if (!o) return { error: "Order not found." };
+    if (what === "track") {
+      if (!o.awb) return { error: "This order has no tracking number yet." };
+      const r = await syncTracking(o, "staff");
+      return { ok: r.status ? `Courier status: ${r.status}${r.moved ? `. Order moved to ${r.moved.toLowerCase().replace(/_/g, " ")}.` : "."}` : "Shiprocket has no tracking scans for this parcel yet.", revalidate: ["/admin/orders"] };
+    }
+    const r = await shipWithShiprocket(id, { book: what === "book", actorName: me.name });
+    if (r.step === "failed" || r.step === "skipped") return { error: r.message };
+    return { ok: r.message, log: { action: "shiprocket", entity: "order", id, summary: `${o.number}: ${r.message}` }, revalidate: ["/admin/orders"] };
   });
 }

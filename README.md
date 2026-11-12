@@ -98,6 +98,26 @@ Vercel runs the store as serverless functions, so three things live outside it: 
 
 ---
 
+## Shipping with Shiprocket
+
+Orders can be shipped automatically through Shiprocket:
+
+1. **Order placed** (paid online, a confirmed UPI payment, or COD) → sent to Shiprocket, order becomes *Confirmed*.
+2. **Courier booked** (if "auto-book" is on): the courier Shiprocket recommends is booked, pickup is scheduled, the label is created, and the order becomes *Packed*. The customer gets an email with the tracking number.
+3. **Tracking**: Shiprocket's webhook, the daily job and opening the order in the admin all refresh the courier status, moving the order to *Shipped*, *Out for delivery* and *Delivered* (COD is marked collected on delivery). Orders never move backwards; RTO and failed deliveries are logged on the timeline.
+4. **Cancelled before dispatch** → cancelled in Shiprocket too.
+
+If a step fails (for example an empty wallet), the order page shows the reason and a button to retry; the daily job also retries. *Orders → tick orders → Ship with Shiprocket* books up to 10 at once.
+
+**Setup**
+1. Shiprocket → Settings → API → Configure → **Create an API user** (an email not already on Shiprocket). Use that email and password, not your normal login.
+2. Shiprocket → Settings → Pickup Addresses: note the pickup location nickname (e.g. `Primary`).
+3. Admin → Settings → Shipping & COD → **Shiprocket**: tick *Use Shiprocket*, enter the API user, pickup location, packed weight and box size, save, then **Test connection**. (Or set `SHIPROCKET_EMAIL` and `SHIPROCKET_PASSWORD` in Vercel.)
+4. Shiprocket → Settings → API → Webhooks: URL `https://yourdomain/api/logistics/tracking` and the token shown in the admin. Shiprocket refuses webhook URLs containing "shiprocket", "kartrocket", "sr" or "kr", which is why the path is `/logistics/tracking`.
+5. Keep money in the Shiprocket wallet, then place one COD test order and check it reaches *Packed* with an AWB.
+
+The webhook token is checked on every call, and the status is re-read from Shiprocket's tracking API rather than trusted from the webhook body.
+
 ## Owner locked out, or a new owner email
 
 The owner account is created once, at the first deploy. Changing `OWNER_EMAIL` or `OWNER_PASSWORD` afterwards does nothing by itself. To reset it:

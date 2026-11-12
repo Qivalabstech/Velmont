@@ -36,6 +36,13 @@
       "when": 1794246085168,
       "tag": "0004_rate_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794516981957,
+      "tag": "0005_shiprocket",
+      "breakpoints": true
     }
   ]
 }

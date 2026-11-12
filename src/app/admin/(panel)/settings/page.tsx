@@ -7,7 +7,8 @@ import { SITE_URL } from "@/lib/env";
 import { INDIAN_STATES } from "@/lib/utils";
 import { PageHead, Card, Pill } from "@/components/admin/ui";
 import { AForm, Submit } from "@/components/admin/Form";
-import { saveStore, saveShipping, savePayments, testRazorpay, saveNotifications, saveYoupi, testYoupi, savePaymentGeneral, saveCashfree, testCashfree } from "./actions";
+import { saveStore, saveShipping, savePayments, testRazorpay, saveNotifications, saveYoupi, testYoupi, savePaymentGeneral, saveCashfree, testCashfree, saveShiprocket, testShiprocket } from "./actions";
+import { shiprocketMissing } from "@/lib/shiprocket";
 import { onlineGateway } from "@/lib/online";
 import { cashfreeMode } from "@/lib/cashfree";
 import { youpiConfig, youpiMissing } from "@/lib/youpi";
@@ -60,7 +61,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </AForm>
       )}
 
-      {tab === "shipping" && (
+      {tab === "shipping" && (<div className="stack">
         <AForm action={saveShipping} className="stack">
           <Card title="Shipping charges">
             <div className="fgrid">
@@ -83,7 +84,29 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Card>
           <div className="savebar"><Submit>Save shipping</Submit></div>
         </AForm>
-      )}
+        <Card title="Shiprocket" sub={<>Status: <Pill tone={s.shiprocket.enabled && !shiprocketMissing(s.shiprocket).length ? "good" : s.shiprocket.enabled ? "warn" : "neutral"}>{s.shiprocket.enabled && !shiprocketMissing(s.shiprocket).length ? (s.shiprocket.autoAssign ? "Automatic: shipment, courier, pickup, tracking" : "Automatic: shipment and tracking") : s.shiprocket.enabled ? `Needs ${shiprocketMissing(s.shiprocket).join(", ")}` : "Off"}</Pill></>}>
+          <p className="hint-box" style={{ marginTop: 0 }}>When an order is placed (paid online, or COD), it is sent to Shiprocket. With auto-booking on, the courier Shiprocket recommends is booked, pickup is scheduled, the label is created and the customer gets the tracking number. Courier updates then move the order to Shipped, Out for delivery and Delivered, with an email each time.</p>
+          {(process.env.SHIPROCKET_EMAIL || process.env.SHIPROCKET_PASSWORD) && <p className="hint-box">The Shiprocket login is set as server environment variables, which override the values below.</p>}
+          <AForm action={saveShiprocket} className="fgrid">
+            <label className="check full"><input type="checkbox" name="srEnabled" defaultChecked={s.shiprocket.enabled} />Use Shiprocket for shipping</label>
+            <div className="field"><label htmlFor="sr-e">API user email</label><input id="sr-e" name="srEmail" type="email" className="input" defaultValue={s.shiprocket.email} autoComplete="off" /><span className="hint">Shiprocket → Settings → API → Configure → Create API user. Not your normal login.</span></div>
+            <div className="field"><label htmlFor="sr-p">API user password <span className="muted">({s.shiprocket.password ? "saved" : "not set"})</span></label><input id="sr-p" name="srPassword" type="password" className="input" placeholder="Leave blank to keep" autoComplete="new-password" /></div>
+            <div className="field full"><label htmlFor="sr-l">Pickup location name</label><input id="sr-l" name="srPickup" className="input" defaultValue={s.shiprocket.pickupLocation} placeholder="Primary" /><span className="hint">Exactly as written in Shiprocket → Settings → Pickup Addresses (the nickname, e.g. “Primary”).</span></div>
+            <label className="check full"><input type="checkbox" name="srAutoCreate" defaultChecked={s.shiprocket.autoCreate} />Send every placed order to Shiprocket automatically</label>
+            <label className="check full"><input type="checkbox" name="srAutoAssign" defaultChecked={s.shiprocket.autoAssign} />Also book the recommended courier, schedule pickup and create the label <span className="muted">(uses your Shiprocket wallet)</span></label>
+            <div className="field"><label htmlFor="sr-w">Weight per belt, packed (kg)</label><input id="sr-w" name="srWeight" type="number" step="0.01" className="input" defaultValue={s.shiprocket.weightPerItemKg} /></div>
+            <div className="field"><label>Box size L × B × H (cm)</label><div style={{ display: "flex", gap: 6 }}><input aria-label="Length cm" name="srL" type="number" className="input" defaultValue={s.shiprocket.lengthCm} /><input aria-label="Breadth cm" name="srB" type="number" className="input" defaultValue={s.shiprocket.breadthCm} /><input aria-label="Height cm" name="srH" type="number" className="input" defaultValue={s.shiprocket.heightCm} /></div><span className="hint">Courier charges use the larger of real and volumetric weight, so keep these accurate.</span></div>
+            <label className="check full"><input type="checkbox" name="srNewToken" />Make a new webhook token</label>
+            <div><Submit>Save Shiprocket settings</Submit></div>
+          </AForm>
+          <AForm action={testShiprocket} style={{ marginTop: 12 }}><Submit className="btn sm" pendingText="Checking…">Test connection</Submit></AForm>
+          <ol style={{ margin: "16px 0 0", paddingLeft: 18, display: "grid", gap: 6, fontSize: ".9rem" }}>
+            <li>Shiprocket → Settings → API → Webhooks: URL <code>{SITE_URL}/api/logistics/tracking</code>, token <code style={{ wordBreak: "break-all" }}>{s.shiprocket.webhookToken || "save once to create it"}</code>, then switch it on.</li>
+            <li>Keep money in your Shiprocket wallet so couriers can be booked. If booking fails, the order shows the reason and you can retry from the order page.</li>
+            <li>Tracking is also refreshed once a day and whenever you open an order, in case a webhook is missed.</li>
+          </ol>
+        </Card>
+      </div>)}
 
       {tab === "payments" && (
         <div className="stack">

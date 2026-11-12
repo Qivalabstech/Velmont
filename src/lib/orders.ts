@@ -82,6 +82,11 @@ export async function sendPlacedEmails(orderId: string) {
     await mailOrderPlaced(o);
     await mailNewOrderAlert(o);
   } catch (e) { await logError("email", e); }
+  // Hand the order to Shiprocket (runs after the response; no-op when Shiprocket is off).
+  try {
+    const { onOrderPlacedShipping } = await import("./shiprocket-orders");
+    await onOrderPlacedShipping(orderId);
+  } catch (e) { await logError("shiprocket", e); }
 }
 
 export async function clearCart(cartId: string) {
@@ -281,6 +286,10 @@ export async function updateOrderStatus(input: {
   if (input.notify) {
     const full = await getOrderFull(o.id);
     if (full) await mailOrderStatus(full, input.note).catch((e) => logError("email", e));
+  }
+  if (input.status === "CANCELLED" && o.shiprocketOrderId && !["SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"].includes(o.status)) {
+    const { cancelInShiprocket } = await import("./shiprocket-orders");
+    await cancelInShiprocket(o, input.actorName);
   }
 }
 

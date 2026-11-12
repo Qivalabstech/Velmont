@@ -3,6 +3,8 @@ import { run, type ActionState } from "@/lib/admin-action";
 import { saveSetting, clearSettingsCache } from "@/lib/settings";
 import { pingRazorpay } from "@/lib/razorpay";
 import { pingCashfree } from "@/lib/cashfree";
+import { pingShiprocket, clearShiprocketToken, shiprocketConfig, shiprocketMissing } from "@/lib/shiprocket";
+import { randomBytes } from "crypto";
 import { pingYoupi, youpiConfig, youpiMissing } from "@/lib/youpi";
 import { str, num, bool, isEmail, INDIAN_STATES } from "@/lib/utils";
 import { toPaise } from "@/lib/money";
@@ -121,6 +123,40 @@ export async function testYoupi(_: ActionState) {
     if (miss.length) return { error: `Add the ${miss.join(", ")} first.` };
     try { await pingYoupi(); return { ok: "The UPI gateway is reachable. Place a small test order to confirm the merchant key and webhook." }; }
     catch (e) { return { error: e instanceof Error ? e.message : "The UPI gateway did not answer." }; }
+  });
+}
+
+export async function saveShiprocket(_: ActionState, fd: FormData) {
+  return run("settings.manage", async () => {
+    const cur = await shiprocketConfig();
+    const email = str(fd, "srEmail").toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter the Shiprocket API user's email address." };
+    const dims = (k: string, d: number, max: number) => Math.min(max, Math.max(0.1, Number(str(fd, k)) || d));
+    const patch: Record<string, unknown> = {
+      enabled: bool(fd, "srEnabled"), email, pickupLocation: str(fd, "srPickup"),
+      autoCreate: bool(fd, "srAutoCreate"), autoAssign: bool(fd, "srAutoAssign"),
+      weightPerItemKg: dims("srWeight", 0.35, 20), lengthCm: dims("srL", 32, 200), breadthCm: dims("srB", 12, 200), heightCm: dims("srH", 6, 200),
+    };
+    if (str(fd, "srPassword")) patch.password = str(fd, "srPassword");
+    if (!cur.webhookToken || bool(fd, "srNewToken")) patch.webhookToken = randomBytes(24).toString("base64url");
+    await saveSetting("shiprocket", patch);
+    if (email !== cur.email || patch.password) await clearShiprocketToken();
+    const c = await shiprocketConfig();
+    const miss = shiprocketMissing(c);
+    return {
+      ok: !c.enabled ? "Saved. Shiprocket is switched off." : miss.length ? `Saved, but Shiprocket stays off until you add the ${miss.join(", ")}.` : "Saved. New orders will be sent to Shiprocket. Press “Test connection” to check the login.",
+      log: { action: "update", entity: "settings", summary: `Shiprocket ${c.enabled ? "on" : "off"}${c.autoAssign ? ", auto-book courier" : ""}` },
+    };
+  });
+}
+
+export async function testShiprocket(_: ActionState) {
+  return run("settings.manage", async () => {
+    clearSettingsCache();
+    const miss = shiprocketMissing(await shiprocketConfig()).filter((m) => m !== "pickup location name");
+    if (miss.length) return { error: `Add the ${miss.join(", ")} first.` };
+    try { await pingShiprocket(); return { ok: "Shiprocket accepted the API user. You're connected." }; }
+    catch (e) { return { error: e instanceof Error ? e.message : "Shiprocket rejected the login." }; }
   });
 }
 
