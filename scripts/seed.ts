@@ -105,6 +105,25 @@ async function main() {
       passwordHash: await bcrypt.hash(pw, 12), kind: "STAFF", isOwner: true,
     });
     console.log(live ? `Owner account created: ${ownerEmail}` : `Owner account created: ${ownerEmail} / ${pw}  (change this password after first sign-in)`);
+  } else if (process.env.OWNER_RESET === "true") {
+    // Owner locked out (or wants a new login email): set OWNER_EMAIL / OWNER_PASSWORD, OWNER_RESET=true, redeploy once,
+    // then delete OWNER_RESET and OWNER_PASSWORD. Every existing owner session is signed out.
+    const pw = process.env.OWNER_PASSWORD || "";
+    if (pw.length < 10) {
+      console.warn("OWNER_RESET is on but OWNER_PASSWORD is missing or shorter than 10 characters. Owner login was not changed.");
+    } else {
+      const clash = await db.query.users.findFirst({ where: eq(s.users.email, ownerEmail) });
+      if (clash && clash.id !== existingOwner.id) {
+        console.warn(`OWNER_RESET: ${ownerEmail} already belongs to another account, so the owner login was not changed.`);
+      } else {
+        await db.update(s.users).set({
+          email: ownerEmail, ...(process.env.OWNER_NAME ? { name: process.env.OWNER_NAME } : {}),
+          passwordHash: await bcrypt.hash(pw, 12),
+        }).where(eq(s.users.id, existingOwner.id));
+        await db.delete(s.sessions).where(eq(s.sessions.userId, existingOwner.id));
+        console.log(`OWNER_RESET: owner login is now ${ownerEmail}. Remove OWNER_RESET and OWNER_PASSWORD from the environment.`);
+      }
+    }
   }
 
   const done = await db.query.settings.findFirst({ where: eq(s.settings.key, "seeded") });

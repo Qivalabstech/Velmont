@@ -98,6 +98,14 @@ Vercel runs the store as serverless functions, so three things live outside it: 
 
 ---
 
+## Owner locked out, or a new owner email
+
+The owner account is created once, at the first deploy. Changing `OWNER_EMAIL` or `OWNER_PASSWORD` afterwards does nothing by itself. To reset it:
+
+1. In Vercel set `OWNER_EMAIL` (the new login email), `OWNER_PASSWORD` (10+ characters) and `OWNER_RESET` = `true` for Production.
+2. Redeploy. The build log says `OWNER_RESET: owner login is now …`, and every existing owner session is signed out.
+3. Sign in at `/admin`, then delete `OWNER_RESET` and `OWNER_PASSWORD` from Vercel (Site health reminds you).
+
 ## Online payments with Cashfree
 
 “Pay online” at checkout goes through **Cashfree Payments** when its keys are set (UPI, cards, netbanking, wallets). Razorpay still works if you prefer it: Admin → Settings → Payments → *Gateway for “Pay online”*.
