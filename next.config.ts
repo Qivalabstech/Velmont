@@ -18,10 +18,12 @@ const config: NextConfig = {
   serverExternalPackages: ["pg", "nodemailer", "sharp"],
   images: {
     formats: ["image/avif", "image/webp"],
+    minimumCacheTTL: 2592000, // optimized photos stay cached at the edge for 30 days (product photos rarely change)
     localPatterns: [{ pathname: "/img/**" }, { pathname: "/media/**" }],
     remotePatterns: [{ protocol: "https", hostname: "*.public.blob.vercel-storage.com" }],
   },
-  experimental: { serverActions: { bodySizeLimit: "12mb" } },
+  // inlineCss: styles ship inside the HTML, so the first paint does not wait for separate CSS files.
+  experimental: { serverActions: { bodySizeLimit: "12mb" }, inlineCss: true },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },

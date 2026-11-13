@@ -10,13 +10,15 @@ export function Lift() {
     const io = new IntersectionObserver((es) => es.forEach((e) => {
       if (e.isIntersecting) { e.target.classList.remove("pre"); io.unobserve(e.target); }
     }), { rootMargin: "0px 0px -8% 0px" });
-    document.querySelectorAll<HTMLElement>(".lift:not([data-armed])").forEach((el, i) => {
+    const els = Array.from(document.querySelectorAll<HTMLElement>(".lift:not([data-armed])"));
+    const vh = innerHeight;
+    const below = els.map((el) => el.getBoundingClientRect().top > vh); // all reads first: one layout, not one per element
+    els.forEach((el, i) => {
       el.dataset.armed = "1";
-      if (el.getBoundingClientRect().top > innerHeight) {
-        el.classList.add("pre");
-        el.style.transitionDelay = el.classList.contains("card") ? `${(i % 4) * 0.06}s` : "0s";
-        io.observe(el);
-      }
+      if (!below[i]) return;
+      el.classList.add("pre");
+      el.style.transitionDelay = el.classList.contains("card") ? `${(i % 4) * 0.06}s` : "0s";
+      io.observe(el);
     });
     return () => io.disconnect();
   }, [path]);

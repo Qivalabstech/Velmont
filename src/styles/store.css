@@ -96,7 +96,7 @@ section.block{padding-block:96px}
 .disc{position:absolute;inset:16%;border-radius:50%;background:radial-gradient(circle at 40% 35%,var(--paper),#E2E0D9 70%);box-shadow:inset 0 0 0 1px var(--line)}
 .slides{position:absolute;inset:0;transition:transform .6s var(--ease)}
 .slide{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transform:translateX(18%) rotate(8deg) scale(.92);transition:opacity .9s var(--ease),transform 1.1s var(--ease);pointer-events:none}
-.slide img{width:96%;height:auto;filter:drop-shadow(0 30px 28px rgba(40,25,15,.28)) drop-shadow(0 6px 6px rgba(40,25,15,.18))}
+.slide img{width:96%;height:auto;filter:drop-shadow(0 24px 22px rgba(40,25,15,.3))}
 .slide.on{opacity:1;transform:none}
 .slide.out{opacity:0;transform:translateX(-22%) rotate(-10deg) scale(.9)}
 .hero-tag{position:absolute;left:4%;bottom:6%;background:var(--paper);border:1px solid var(--line);padding:12px 16px;display:grid;gap:2px;min-width:200px;box-shadow:0 10px 30px -14px rgba(28,23,20,.35);z-index:3;text-decoration:none}
@@ -113,7 +113,7 @@ section.block{padding-block:96px}
 @keyframes vm-prog{to{transform:scaleX(1)}}
 .giant{position:absolute;left:0;right:0;bottom:-.17em;z-index:1;font-family:var(--f-display);font-weight:900;font-size:clamp(7rem,25vw,24rem);line-height:.8;letter-spacing:.02em;text-align:center;white-space:nowrap;color:transparent;-webkit-text-stroke:1.5px rgba(107,74,53,.28);pointer-events:none;user-select:none}
 .giant span{display:inline-block;animation:vm-giant 1s var(--ease) both}
-@keyframes vm-giant{from{transform:translateY(40%);-webkit-text-stroke-color:transparent}}
+@keyframes vm-giant{from{transform:translateY(40%);opacity:0}}
 @media (max-width:860px){
   .hero .wrap{grid-template-columns:minmax(0,1fr);grid-template-areas:"intro" "stage" "rest";padding-block:28px 22vw;row-gap:4px}
   .stage{max-width:520px;width:100%;margin:0 auto}

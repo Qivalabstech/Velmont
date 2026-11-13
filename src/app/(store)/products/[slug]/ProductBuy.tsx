@@ -77,7 +77,7 @@ export function ProductBuy({ product, images, variants: cachedVariants, rating, 
           }}
           role="button" tabIndex={0} aria-label={zoom ? "Zoom out" : "Zoom in"}
           onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setZoom((z) => !z)}>
-          {images[img] && <Image key={img} src={images[img].url} alt={images[img].alt} fill priority sizes="(max-width:860px) 100vw, 58vw" />}
+          {images[img] && <Image key={img} src={images[img].url} alt={images[img].alt} fill priority fetchPriority={img === 0 ? "high" : "auto"} sizes="(max-width:860px) 100vw, 58vw" />}
         </div>
         {images.length > 1 && (
           <div className="thumbs" role="group" aria-label="Photos">

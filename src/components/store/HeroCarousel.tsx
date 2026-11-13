@@ -11,6 +11,12 @@ export function HeroCarousel({ slides, storeName }: { slides: Slide[]; storeName
   const [cur, setCur] = useState(0);
   const [out, setOut] = useState<number | null>(null);
   const [tick, setTick] = useState(0);
+  const [rest, setRest] = useState(false); // the other slides' photos load once the page is idle
+  useEffect(() => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    if (w.requestIdleCallback) w.requestIdleCallback(() => setRest(true), { timeout: 2500 });
+    else setTimeout(() => setRest(true), 1500);
+  }, []);
   const stage = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
 
@@ -21,9 +27,10 @@ export function HeroCarousel({ slides, storeName }: { slides: Slide[]; storeName
 
   useEffect(() => {
     if (slides.length < 2 || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!rest) return;
     const t = setTimeout(() => go((cur + 1) % slides.length), DUR);
     return () => clearTimeout(t);
-  }, [cur, tick, go, slides.length]);
+  }, [cur, tick, go, slides.length, rest]);
 
   useEffect(() => {
     const el = stage.current, sl = inner.current;
@@ -51,7 +58,7 @@ export function HeroCarousel({ slides, storeName }: { slides: Slide[]; storeName
       <div className="slides" ref={inner}>
         {slides.map((sl, i) => (
           <div key={sl.slug} className={`slide${i === cur ? " on" : ""}${i === out ? " out" : ""}`} aria-hidden={i !== cur}>
-            <Image src={sl.image} alt={sl.alt} width={980} height={420} priority={i === 0} sizes="(max-width:860px) 100vw, 60vw" />
+            {(i === 0 || rest) && <Image src={sl.image} alt={sl.alt} width={980} height={420} priority={i === 0} fetchPriority={i === 0 ? "high" : "low"} sizes="(max-width:860px) 100vw, 60vw" />}
           </div>
         ))}
       </div>

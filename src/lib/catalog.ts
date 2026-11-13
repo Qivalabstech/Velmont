@@ -50,6 +50,29 @@ export async function listProducts(opts: {
   }));
 }
 
+export type ShopProduct = CardProduct & { categorySlug: string | null; tags: string[]; createdAt: number; sortOrder: number; search: string };
+
+/** Every active belt with what the shop page needs to filter, sort and search in the browser. */
+export async function listShopProducts(): Promise<ShopProduct[]> {
+  const rows = await db.query.products.findMany({
+    where: eq(products.status, "ACTIVE"), orderBy: [asc(products.sortOrder), desc(products.createdAt)],
+    with: {
+      images: { orderBy: [asc(productImages.sortOrder)], limit: 2 },
+      variants: { columns: { stock: true, active: true } },
+      category: { columns: { slug: true } },
+    },
+  });
+  const ratings = await ratingMap(rows.map((r) => r.id));
+  return rows.map((p) => ({
+    id: p.id, name: p.name, slug: p.slug, tagline: p.tagline, price: p.price, mrp: p.mrp, badge: p.badge,
+    colors: p.colors, images: p.images.map((i) => ({ url: i.url, alt: i.alt || p.name })),
+    inStock: p.variants.some((v) => v.active && v.stock > 0),
+    rating: ratings.get(p.id)?.avg ?? 0, reviewCount: ratings.get(p.id)?.n ?? 0,
+    categorySlug: p.category?.slug ?? null, tags: p.tags ?? [], createdAt: new Date(p.createdAt).getTime(), sortOrder: p.sortOrder,
+    search: [p.name, p.tagline, p.description, p.leather].join(" ").toLowerCase(),
+  }));
+}
+
 export async function getProduct(slug: string) {
   const p = await db.query.products.findFirst({
     where: and(eq(products.slug, slug), eq(products.status, "ACTIVE")),
