@@ -9,6 +9,7 @@ export function securityStatus() {
   if (!authSecretOk()) { problems.push("Set AUTH_SECRET to a random value of at least 32 characters (it signs order links and sessions)."); critical = true; }
   if (IS_PROD && PAYMENTS_MOCK) { problems.push("Turn off PAYMENTS_MOCK: it lets anyone mark an order paid without paying."); critical = true; }
   if (IS_VERCEL && (process.env.CRON_SECRET || "").length < 16) problems.push("Set CRON_SECRET (at least 16 characters) so only Vercel can run the daily job.");
+  if (IS_PROD && process.env.PAYU_API_BASE) problems.push("Remove PAYU_API_BASE: it is for automated tests only.");
   if (IS_PROD && process.env.CASHFREE_API_BASE) problems.push("Remove CASHFREE_API_BASE: it is for automated tests only.");
   if (IS_PROD && process.env.SHIPROCKET_API_BASE) problems.push("Remove SHIPROCKET_API_BASE: it is for automated tests only.");
   if (process.env.OWNER_RESET === "true") problems.push("Delete the OWNER_RESET environment variable now that the owner login has been reset; otherwise every deploy resets it again.");

@@ -32,8 +32,8 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   const canManage = me.perms.has("orders.manage"), canRefund = me.perms.has("orders.refund");
   const next = NEXT_STATUSES[o.status].filter((s) => s !== "CANCELLED" || canRefund);
   const refundable = o.total - o.refunded;
-  const paidOnline = (o.paymentMethod === "RAZORPAY" || o.paymentMethod === "CASHFREE") && (o.paymentStatus === "PAID" || o.paymentStatus === "PARTIALLY_REFUNDED");
-  const gatewayName = o.paymentMethod === "CASHFREE" ? "Cashfree" : "Razorpay";
+  const paidOnline = (o.paymentMethod === "RAZORPAY" || o.paymentMethod === "CASHFREE" || o.paymentMethod === "PAYU") && (o.paymentStatus === "PAID" || o.paymentStatus === "PARTIALLY_REFUNDED");
+  const gatewayName = o.paymentMethod === "PAYU" ? "PayU" : o.paymentMethod === "CASHFREE" ? "Cashfree" : "Razorpay";
   // A UPI order staff can still settle by checking the bank: waiting, flagged, or auto-cancelled before the money showed up.
   const upiReview = o.paymentMethod === "UPI" && (o.paymentStatus === "VERIFYING" || o.paymentStatus === "PENDING" || (o.status === "CANCELLED" && o.paymentStatus === "FAILED"));
   const waText = encodeURIComponent(`Hi ${a.name.split(" ")[0]}, this is VELMONT about your order ${o.number}.`);
@@ -116,6 +116,8 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               {o.paidAt && <><dt>Paid</dt><dd>{formatDate(o.paidAt, true)}</dd></>}
               {o.razorpayPaymentId && <><dt>Payment ID</dt><dd><code>{o.razorpayPaymentId}</code></dd></>}
               {o.razorpayOrderId && <><dt>Razorpay order</dt><dd><code>{o.razorpayOrderId}</code></dd></>}
+              {o.payuTxnId && <><dt>PayU transaction</dt><dd><code>{o.payuTxnId}</code></dd></>}
+              {o.payuPaymentId && <><dt>PayU payment (mihpayid)</dt><dd><code>{o.payuPaymentId}</code></dd></>}
               {o.cashfreeOrderId && <><dt>Cashfree order</dt><dd><code>{o.cashfreeOrderId}</code></dd></>}
               {o.cashfreePaymentId && <><dt>Cashfree payment</dt><dd><code>{o.cashfreePaymentId}</code></dd></>}
               {o.upiUtr && <><dt>UTR</dt><dd><code>{o.upiUtr}</code></dd></>}
@@ -125,7 +127,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             {o.refunds.length > 0 && (
               <div style={{ marginTop: 12, display: "grid", gap: 6, fontSize: ".85rem" }}>
                 <b>Refunds</b>
-                {o.refunds.map((r) => <div key={r.id}>{inr(r.amount)} · {r.reason} · {r.status === "manual" ? "recorded manually" : r.razorpayRefundId?.startsWith("cf:") ? "via Cashfree" : "via Razorpay"} · {formatDate(r.createdAt)} · {r.actorName}</div>)}
+                {o.refunds.map((r) => <div key={r.id}>{inr(r.amount)} · {r.reason} · {r.status === "manual" ? "recorded manually" : r.razorpayRefundId?.startsWith("payu:") ? "via PayU" : r.razorpayRefundId?.startsWith("cf:") ? "via Cashfree" : "via Razorpay"} · {formatDate(r.createdAt)} · {r.actorName}</div>)}
               </div>
             )}
           </Card>

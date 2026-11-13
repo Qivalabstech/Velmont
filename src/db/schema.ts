@@ -27,7 +27,8 @@ export const paymentStatus = pgEnum("payment_status", [
 ]);
 // UPI = direct UPI to the store's bank account through a self-hosted YouPI gateway.
 // CASHFREE = online payment (UPI, cards, netbanking, wallets) through Cashfree Payments.
-export const paymentMethod = pgEnum("payment_method", ["RAZORPAY", "COD", "UPI", "CASHFREE"]);
+// PAYU = online payment through PayU India hosted checkout.
+export const paymentMethod = pgEnum("payment_method", ["RAZORPAY", "COD", "UPI", "CASHFREE", "PAYU"]);
 export type PaymentMethod = (typeof paymentMethod.enumValues)[number];
 export const reviewStatus = pgEnum("review_status", ["PENDING", "APPROVED", "REJECTED"]);
 
@@ -209,6 +210,8 @@ export const orders = pgTable("orders", {
   razorpayPaymentId: text("razorpay_payment_id"),
   cashfreeOrderId: text("cashfree_order_id").unique(), // order_id sent to Cashfree (order number, or number-R2 on a retry)
   cashfreePaymentId: text("cashfree_payment_id"),
+  payuTxnId: text("payu_txn_id"), // txnid of the latest PayU attempt (order number, then number-R2 …)
+  payuPaymentId: text("payu_payment_id"), // PayU mihpayid of the successful payment (needed for refunds)
   youpiPaymentId: text("youpi_payment_id"),
   youpiMethod: text("youpi_method"), // UPI (bank alerts) or MANUAL_UPI (customer enters UTR)
   upiUtr: text("upi_utr"),

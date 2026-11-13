@@ -9,6 +9,7 @@ import { createOrder, clearCart, sendPlacedEmails, StockError, releaseExpiredOrd
 import { createRazorpayOrder, razorpayKeys } from "@/lib/razorpay";
 import { onlineGateway } from "@/lib/online";
 import { startCashfreePayment } from "@/lib/cashfree-orders";
+import { startPayuPayment } from "@/lib/payu-orders";
 import { youpiReady } from "@/lib/youpi";
 import { startUpiPayment } from "@/lib/youpi-start";
 import { orderToken } from "@/lib/order-token";
@@ -50,6 +51,7 @@ export type PlaceResult =
   | { ok: true; kind: "mock"; rzpOrderId: string; amount: number; number: string }
   | { ok: true; kind: "redirect"; url: string; number: string }
   | { ok: true; kind: "cashfree"; sessionId: string; mode: "production" | "sandbox"; number: string; token: string }
+  | { ok: true; kind: "payu"; form: { action: string; fields: Record<string, string> }; number: string; token: string }
   | { ok: false; error: string; field?: string };
 
 export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
@@ -64,7 +66,7 @@ export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
   const d = parsed.data;
   const gateway = await onlineGateway();
   // The browser only says "pay online"; the server decides which gateway that means.
-  const method = d.method === "ONLINE" || d.method === "RAZORPAY" ? (gateway.provider === "cashfree" ? "CASHFREE" : "RAZORPAY") : d.method;
+  const method = d.method === "ONLINE" || d.method === "RAZORPAY" ? (gateway.provider === "payu" ? "PAYU" : gateway.provider === "cashfree" ? "CASHFREE" : "RAZORPAY") : d.method;
   await releaseExpiredOrders().catch(() => {}); // frees stock held by abandoned online payments
   const cart = await getCartRecord(false);
   if (!cart) return { ok: false, error: "Your bag is empty." };
@@ -81,7 +83,7 @@ export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
     if (!s.shipping.codEnabled) return { ok: false, error: "Cash on delivery is not available right now." };
     if (totals.total > s.shipping.codMaxOrder) return { ok: false, error: "This order is above the cash on delivery limit. Pay online instead." };
   }
-  if ((method === "RAZORPAY" || method === "CASHFREE") && gateway.provider === "off") return { ok: false, error: "Online payment is not set up yet. Choose cash on delivery or contact us." };
+  if ((method === "RAZORPAY" || method === "CASHFREE" || method === "PAYU") && gateway.provider === "off") return { ok: false, error: "Online payment is not set up yet. Choose cash on delivery or contact us." };
   if (d.method === "UPI" && !(await youpiReady())) return { ok: false, error: "UPI payment is not available right now. Choose another way to pay." };
 
   const address = { name: d.name, phone: d.phone, line1: d.line1, line2: d.line2, city: d.city, state: d.state, pincode: d.pincode };
@@ -118,6 +120,13 @@ export async function placeOrder(raw: CheckoutInput): Promise<PlaceResult> {
     const r = await startUpiPayment(order.id);
     if (!r.ok) return { ok: true, kind: "redirect", url: `/order/${order.number}?t=${orderToken(order.number)}&upi=retry`, number: order.number };
     return { ok: true, kind: "redirect", url: r.url, number: order.number };
+  }
+
+  if (method === "PAYU") {
+    const r = await startPayuPayment(order);
+    if (!r.ok) return { ok: false, error: r.error };
+    if ("paid" in r) return { ok: true, kind: "done", number: order.number, token: orderToken(order.number) };
+    return { ok: true, kind: "payu", form: r.form, number: order.number, token: orderToken(order.number) };
   }
 
   if (method === "CASHFREE") {

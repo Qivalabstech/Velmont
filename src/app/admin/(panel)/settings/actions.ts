@@ -3,6 +3,7 @@ import { run, type ActionState } from "@/lib/admin-action";
 import { saveSetting, clearSettingsCache } from "@/lib/settings";
 import { pingRazorpay } from "@/lib/razorpay";
 import { pingCashfree } from "@/lib/cashfree";
+import { pingPayu } from "@/lib/payu";
 import { pingShiprocket, clearShiprocketToken, shiprocketConfig, shiprocketMissing } from "@/lib/shiprocket";
 import { randomBytes } from "crypto";
 import { pingYoupi, youpiConfig, youpiMissing } from "@/lib/youpi";
@@ -54,13 +55,34 @@ export async function savePayments(_: ActionState, fd: FormData) {
 export async function savePaymentGeneral(_: ActionState, fd: FormData) {
   return run("settings.manage", async () => {
     const g = str(fd, "onlineGateway");
-    const onlineGateway = g === "cashfree" || g === "razorpay" ? g : "auto";
+    const onlineGateway = g === "payu" || g === "cashfree" || g === "razorpay" ? g : "auto";
     await saveSetting("payments", {
       onlineGateway,
       prepaidDiscountPercent: Math.min(50, Math.max(0, num(fd, "prepaidDiscountPercent"))),
       pendingPaymentMinutes: Math.min(1440, Math.max(16, num(fd, "pendingPaymentMinutes", 30))),
     });
     return { ok: "Saved.", log: { action: "update", entity: "settings", summary: `Payments: online gateway ${onlineGateway}` } };
+  });
+}
+
+export async function savePayu(_: ActionState, fd: FormData) {
+  return run("settings.manage", async () => {
+    const key = str(fd, "payuKey");
+    if (key && !/^[A-Za-z0-9]{4,40}$/.test(key)) return { error: "That does not look like a PayU Merchant Key. Copy it from PayU Dashboard → Developers → API Keys." };
+    const env = str(fd, "payuEnv") === "test" ? "test" : "production";
+    const patch: Record<string, unknown> = { payuKey: key, payuEnv: env };
+    if (str(fd, "payuSalt")) patch.payuSalt = str(fd, "payuSalt");
+    if (bool(fd, "clearPayu")) Object.assign(patch, { payuKey: "", payuSalt: "" });
+    await saveSetting("payments", patch);
+    return { ok: "PayU settings saved. Press “Test connection” to check the keys.", log: { action: "update", entity: "settings", summary: `PayU (${env}, key ${key ? key.slice(0, 3) + "…" : "removed"})` } };
+  });
+}
+
+export async function testPayu(_: ActionState) {
+  return run("settings.manage", async () => {
+    clearSettingsCache();
+    try { await pingPayu(); return { ok: "PayU accepted the Merchant Key and Salt. Online payments are ready." }; }
+    catch (e) { return { error: e instanceof Error ? e.message : "PayU rejected the keys." }; }
   });
 }
 

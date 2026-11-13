@@ -126,6 +126,20 @@ The owner account is created once, at the first deploy. Changing `OWNER_EMAIL` o
 2. Redeploy. The build log says `OWNER_RESET: owner login is now …`, and every existing owner session is signed out.
 3. Sign in at `/admin`, then delete `OWNER_RESET` and `OWNER_PASSWORD` from Vercel (Site health reminds you).
 
+## Online payments with PayU
+
+PayU is the main online gateway: when its Merchant Key and Salt are set, "Pay online" uses PayU (UPI, cards, netbanking, wallets). The customer is sent to PayU's secure page and comes back to the order page.
+
+An order is marked paid only after the store asks PayU (verify_payment) and PayU says **success for exactly the order total**. The return page, a webhook (hash-checked with the Salt) and the order page all ask PayU, so a payment is caught even if the customer closes the window. Failed attempts can be retried from the order page (each attempt gets a new transaction id: `VM-10051`, `VM-10051-R2`, …). Refunds go back through PayU from the admin order page.
+
+**Setup**
+1. PayU Dashboard → Developers → API Keys: copy the **Merchant Key** and **Salt (version 2)**.
+2. Add them in Vercel as `PAYU_KEY` and `PAYU_SALT` (Secret), or in Admin → Settings → Payments → PayU. Set `PAYU_ENV=test` while testing with test keys.
+3. Admin → Settings → Payments → PayU → **Test PayU connection**.
+4. PayU Dashboard → Webhooks: add `https://yourdomain/api/payments/payu/webhook` for successful and failed payments.
+5. Make sure your domain is the approved website on your PayU account.
+6. Place a ₹1 test order, check it shows as paid, then refund it from the order page.
+
 ## Online payments with Cashfree
 
 “Pay online” at checkout goes through **Cashfree Payments** when its keys are set (UPI, cards, netbanking, wallets). Razorpay still works if you prefer it: Admin → Settings → Payments → *Gateway for “Pay online”*.

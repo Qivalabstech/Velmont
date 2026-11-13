@@ -26,6 +26,7 @@ export const PAYMENT_LABEL: Record<PaymentStatus, string> = {
 
 export const METHOD_LABEL: Record<PaymentMethod, string> = {
   CASHFREE: "Online (Cashfree)",
+  PAYU: "Online (PayU)",
   RAZORPAY: "Online (Razorpay)",
   COD: "Cash on delivery",
   UPI: "UPI (direct to bank)",

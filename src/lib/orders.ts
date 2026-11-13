@@ -10,6 +10,7 @@ import { mailNewOrderAlert, mailOrderPlaced, mailOrderStatus } from "./email";
 import { STATUS_LABEL } from "./order-status";
 import { refundRazorpayPayment } from "./razorpay";
 import { refundCashfree } from "./cashfree";
+import { refundPayu } from "./payu";
 import { logError } from "./audit";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -148,6 +149,18 @@ export async function markCashfreePaid(orderId: string, cfPaymentId: string | nu
       return o;
     },
     cfPaymentId ? { cashfreePaymentId: cfPaymentId } : {}, `Cashfree (${source})`,
+  );
+}
+
+/** Marks a PayU order as paid after verify_payment confirmed it. Safe to call twice (return page and webhook). */
+export async function markPayuPaid(orderId: string, mihpayid: string | null, txnid: string, source: string) {
+  return settle(
+    async (tx) => {
+      const [o] = await tx.select().from(orders).where(eq(orders.id, orderId)).for("update");
+      if (o && o.paymentMethod !== "PAYU") throw new Error("This order was not paid through PayU.");
+      return o;
+    },
+    { payuTxnId: txnid, ...(mihpayid ? { payuPaymentId: mihpayid } : {}) }, `PayU (${source})`,
   );
 }
 
@@ -301,7 +314,12 @@ export async function refundOrder(input: { orderId: string; amount: number; reas
   let gatewayId: string | null = null;
   let gatewayNote = "sent to the original payment method";
   if (input.viaGateway) {
-    if (o.paymentMethod === "CASHFREE" && o.cashfreeOrderId) {
+    if (o.paymentMethod === "PAYU" && o.payuPaymentId) {
+      const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(refunds).where(eq(refunds.orderId, o.id));
+      const r = await refundPayu(o.payuPaymentId, input.amount, `${o.number.replace(/[^A-Za-z0-9]/g, "")}R${n + 1}${Date.now().toString(36)}`);
+      gatewayId = `payu:${r.requestId}`;
+      gatewayNote = "started at PayU; the bank usually takes 5–7 working days";
+    } else if (o.paymentMethod === "CASHFREE" && o.cashfreeOrderId) {
       const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(refunds).where(eq(refunds.orderId, o.id));
       const refundId = `${o.number.replace(/[^A-Za-z0-9]/g, "")}R${n + 1}`;
       const r = await refundCashfree(o.cashfreeOrderId, input.amount, refundId, input.reason);

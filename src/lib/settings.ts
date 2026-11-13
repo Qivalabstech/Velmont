@@ -45,8 +45,11 @@ export const DEFAULT_SETTINGS = {
     heightCm: 6,
   },
   payments: {
-    // Which gateway handles "Pay online". "auto" uses Cashfree when its keys are set, otherwise Razorpay.
-    onlineGateway: "auto" as "auto" | "cashfree" | "razorpay",
+    // Which gateway handles "Pay online". "auto" uses PayU when its keys are set, then Cashfree, then Razorpay.
+    onlineGateway: "auto" as "auto" | "payu" | "cashfree" | "razorpay",
+    payuKey: "",
+    payuSalt: "",
+    payuEnv: "production" as "production" | "test",
     cashfreeAppId: "",
     cashfreeSecretKey: "",
     cashfreeEnv: "production" as "production" | "sandbox",
@@ -125,6 +128,9 @@ export async function getSettings(): Promise<Settings> {
   if (process.env.RAZORPAY_KEY_ID) merged.payments.razorpayKeyId = process.env.RAZORPAY_KEY_ID;
   if (process.env.RAZORPAY_KEY_SECRET) merged.payments.razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
   if (process.env.RAZORPAY_WEBHOOK_SECRET) merged.payments.razorpayWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (process.env.PAYU_KEY) merged.payments.payuKey = process.env.PAYU_KEY;
+  if (process.env.PAYU_SALT) merged.payments.payuSalt = process.env.PAYU_SALT;
+  if (process.env.PAYU_ENV === "test" || process.env.PAYU_ENV === "production") merged.payments.payuEnv = process.env.PAYU_ENV;
   if (process.env.CASHFREE_APP_ID) merged.payments.cashfreeAppId = process.env.CASHFREE_APP_ID;
   if (process.env.CASHFREE_SECRET_KEY) merged.payments.cashfreeSecretKey = process.env.CASHFREE_SECRET_KEY;
   if (process.env.CASHFREE_ENV === "sandbox" || process.env.CASHFREE_ENV === "production") merged.payments.cashfreeEnv = process.env.CASHFREE_ENV;

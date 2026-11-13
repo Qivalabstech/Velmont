@@ -13,11 +13,12 @@ import { CouponBox } from "../cart/CartView";
 import { placeOrder, quote as fetchQuote, type CheckoutInput, type PlaceResult } from "./actions";
 import { fetchCart } from "../actions";
 import { openCashfree } from "@/lib/cashfree-client";
+import { submitPayu } from "@/lib/payu-client";
 
 type Addr = { id: string; name: string; phone: string; line1: string; line2: string; city: string; state: string; pincode: string; isDefault: boolean };
 type RzpSuccess = { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string };
 declare global { interface Window { Razorpay?: new (o: object) => { open: () => void; on: (e: string, cb: (r: unknown) => void) => void } } }
-export type OnlineInfo = { provider: "cashfree" | "razorpay" | "mock" | "off"; mode: string };
+export type OnlineInfo = { provider: "payu" | "cashfree" | "razorpay" | "mock" | "off"; mode: string };
 
 export function CheckoutForm({ lines, quote, online, upiReady, customer, saved, cod, prepaidPercent, delivery }: {
   lines: CartLine[]; quote: { online: Totals; cod: Totals }; online: OnlineInfo; upiReady: boolean;
@@ -83,6 +84,7 @@ export function CheckoutForm({ lines, quote, online, upiReady, customer, saved, 
       if (r.kind === "done") { setCart(await fetchCart()); router.push(`/order/${r.number}?t=${r.token}`); return; }
       if (r.kind === "redirect") { setLeaving(true); window.location.assign(r.url); return; }
       if (r.kind === "mock") { setMock(r); return; }
+      if (r.kind === "payu") { setLeaving(true); submitPayu(r.form); return; }
       if (r.kind === "cashfree") {
         setLeaving(true);
         try { await openCashfree(r.sessionId, r.mode); }
@@ -180,7 +182,7 @@ export function CheckoutForm({ lines, quote, online, upiReady, customer, saved, 
             <div className="pay-opts" role="radiogroup" aria-label="Payment method">
               <label className="pay-opt" aria-disabled={!onlineOk} style={!onlineOk ? { opacity: .5 } : undefined}>
                 <input type="radio" name="method" checked={method === "ONLINE"} disabled={!onlineOk} onChange={() => setMethod("ONLINE")} />
-                <span><b>Pay online</b><small>{onlineOk ? `UPI, cards, netbanking and wallets${online.provider === "cashfree" ? " via Cashfree" : online.provider === "razorpay" ? " via Razorpay" : ""}` : "Not available right now"}{prepaidPercent > 0 ? ` · extra ${prepaidPercent}% off` : ""}</small></span>
+                <span><b>Pay online</b><small>{onlineOk ? `UPI, cards, netbanking and wallets${online.provider === "payu" ? " via PayU" : online.provider === "cashfree" ? " via Cashfree" : online.provider === "razorpay" ? " via Razorpay" : ""}` : "Not available right now"}{prepaidPercent > 0 ? ` · extra ${prepaidPercent}% off` : ""}</small></span>
                 <span className="tnum">{inr(q.online.total)}</span>
               </label>
               {upiReady && (
@@ -225,7 +227,7 @@ export function CheckoutForm({ lines, quote, online, upiReady, customer, saved, 
           <button className="btn solid" type="submit" disabled={pending || verifying || leaving} style={{ minHeight: 52 }}>
             {pending || verifying || leaving ? <><span className="spinner" /> {verifying ? "Confirming payment…" : leaving ? "Opening payment…" : "Placing order…"}</> : method === "COD" ? `Place order · ${inr(t.total)}` : method === "UPI" ? `Pay ${inr(t.total)} by UPI` : `Pay ${inr(t.total)}`}
           </button>
-          <div className="secure"><LockIcon /> {method === "COD" ? "Pay in cash when the belt arrives" : method === "UPI" ? "Paid straight to our bank account by UPI" : online.provider === "cashfree" ? "Secure payment by Cashfree Payments" : "Secure payment by Razorpay"}</div>
+          <div className="secure"><LockIcon /> {method === "COD" ? "Pay in cash when the belt arrives" : method === "UPI" ? "Paid straight to our bank account by UPI" : online.provider === "payu" ? "Secure payment by PayU" : online.provider === "cashfree" ? "Secure payment by Cashfree Payments" : "Secure payment by Razorpay"}</div>
           <p className="muted" style={{ fontSize: ".78rem", margin: 0 }}>By placing the order you agree to our <Link href="/pages/terms">terms</Link> and <Link href="/pages/returns">exchange policy</Link>.</p>
         </aside>
       </form>

@@ -7,6 +7,7 @@ import { checkOrderToken, orderToken } from "@/lib/order-token";
 import { getCustomer } from "@/lib/auth";
 import { syncYoupiOrder } from "@/lib/youpi-orders";
 import { confirmCashfreeOrder } from "@/lib/cashfree-orders";
+import { confirmPayuOrder } from "@/lib/payu-orders";
 import { PayAgain } from "./PayAgain";
 import { inr } from "@/lib/money";
 import { OrderView } from "@/components/store/OrderView";
@@ -37,7 +38,12 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
     if ((await confirmCashfreeOrder(o, "order page")) === "paid") o = (await load(number))!;
   }
 
-  const cfPayable = o.paymentMethod === "CASHFREE" && o.status === "PENDING_PAYMENT" && o.paymentStatus === "PENDING";
+  // PayU order not marked paid yet: ask PayU directly (covers a late or missed webhook).
+  if (o.paymentMethod === "PAYU" && o.status === "PENDING_PAYMENT" && o.paymentStatus === "PENDING" && o.payuTxnId) {
+    if ((await confirmPayuOrder(o, "order page")) === "paid") o = (await load(number))!;
+  }
+
+  const cfPayable = (o.paymentMethod === "CASHFREE" || o.paymentMethod === "PAYU") && o.status === "PENDING_PAYMENT" && o.paymentStatus === "PENDING";
   const paid = o.status !== "PENDING_PAYMENT" && o.status !== "CANCELLED";
   const upiVerifying = o.paymentMethod === "UPI" && o.paymentStatus === "VERIFYING";
   const upiPayable = o.paymentMethod === "UPI" && o.status === "PENDING_PAYMENT" && o.paymentStatus === "PENDING";
@@ -60,7 +66,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           {pay === "failed" && <div className="alert bad" role="alert">The payment did not go through. No money was taken for this attempt. You can try again below.</div>}
           {pay === "pending" && <div className="alert info" role="status">The payment is not complete yet. If money left your account, this page will update within a few minutes, so do not pay twice.</div>}
           <p style={{ margin: 0 }}>Pay <b>{inr(o.total)}</b> by UPI, card, netbanking or wallet. Your belt is reserved for a short while.</p>
-          <PayAgain number={o.number} token={orderToken(o.number)} label={`Pay ${inr(o.total)}`} />
+          <PayAgain number={o.number} token={orderToken(o.number)} label={`Pay ${inr(o.total)}`} gateway={o.paymentMethod === "PAYU" ? "payu" : "cashfree"} />
         </section>
       )}
       {upiPayable && (

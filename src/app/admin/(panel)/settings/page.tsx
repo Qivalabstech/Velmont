@@ -7,10 +7,11 @@ import { SITE_URL } from "@/lib/env";
 import { INDIAN_STATES } from "@/lib/utils";
 import { PageHead, Card, Pill } from "@/components/admin/ui";
 import { AForm, Submit } from "@/components/admin/Form";
-import { saveStore, saveShipping, savePayments, testRazorpay, saveNotifications, saveYoupi, testYoupi, savePaymentGeneral, saveCashfree, testCashfree, saveShiprocket, testShiprocket } from "./actions";
+import { saveStore, saveShipping, savePayments, testRazorpay, saveNotifications, saveYoupi, testYoupi, savePaymentGeneral, saveCashfree, testCashfree, savePayu, testPayu, saveShiprocket, testShiprocket } from "./actions";
 import { shiprocketMissing } from "@/lib/shiprocket";
 import { onlineGateway } from "@/lib/online";
 import { cashfreeMode } from "@/lib/cashfree";
+import { payuMode } from "@/lib/payu";
 import { youpiConfig, youpiMissing } from "@/lib/youpi";
 
 export const metadata = { title: "Settings" };
@@ -21,7 +22,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const s = await getSettings();
   const mode = await paymentsMode();
   const envKeys = !!process.env.RAZORPAY_KEY_ID;
-  const [gw, cfMode] = await Promise.all([onlineGateway(), cashfreeMode()]);
+  const [gw, cfMode, puMode] = await Promise.all([onlineGateway(), cashfreeMode(), payuMode()]);
+  const puEnv = !!(process.env.PAYU_KEY || process.env.PAYU_SALT);
   const cfEnv = !!(process.env.CASHFREE_APP_ID || process.env.CASHFREE_SECRET_KEY);
   const yp = await youpiConfig();
   const ypMissing = youpiMissing(yp);
@@ -110,18 +112,40 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       {tab === "payments" && (
         <div className="stack">
-          <Card title="Online payments" sub={<>“Pay online” uses: <Pill tone={gw.provider === "off" ? "bad" : gw.provider === "mock" ? "warn" : "good"}>{gw.provider === "cashfree" ? `Cashfree (${gw.mode === "sandbox" ? "test mode" : "live"})` : gw.provider === "razorpay" ? `Razorpay (${gw.mode === "test" ? "test mode" : "live"})` : gw.provider === "mock" ? "Simulated (development)" : "Not set up"}</Pill></>}>
+          <Card title="Online payments" sub={<>“Pay online” uses: <Pill tone={gw.provider === "off" ? "bad" : gw.provider === "mock" ? "warn" : "good"}>{gw.provider === "payu" ? `PayU (${gw.mode === "test" ? "test mode" : "live"})` : gw.provider === "cashfree" ? `Cashfree (${gw.mode === "sandbox" ? "test mode" : "live"})` : gw.provider === "razorpay" ? `Razorpay (${gw.mode === "test" ? "test mode" : "live"})` : gw.provider === "mock" ? "Simulated (development)" : "Not set up"}</Pill></>}>
             <AForm action={savePaymentGeneral} className="fgrid">
               <div className="field full"><label htmlFor="pg-g">Gateway for “Pay online”</label>
                 <select id="pg-g" name="onlineGateway" className="select" defaultValue={s.payments.onlineGateway}>
-                  <option value="auto">Automatic: Cashfree when its keys are set, otherwise Razorpay</option>
+                  <option value="auto">Automatic: PayU when its keys are set, then Cashfree, then Razorpay</option>
+                  <option value="payu">PayU only</option>
                   <option value="cashfree">Cashfree only</option>
                   <option value="razorpay">Razorpay only</option>
                 </select></div>
               <div className="field"><label htmlFor="rz-d">Extra discount for paying online (%)</label><input id="rz-d" name="prepaidDiscountPercent" type="number" min={0} max={50} className="input" defaultValue={s.payments.prepaidDiscountPercent} /><span className="hint">Encourages prepaid orders over COD. 0 turns it off.</span></div>
-              <div className="field"><label htmlFor="rz-m">Hold stock for unpaid orders (minutes)</label><input id="rz-m" name="pendingPaymentMinutes" type="number" min={16} max={1440} className="input" defaultValue={s.payments.pendingPaymentMinutes} /><span className="hint">Also how long the Cashfree payment page stays open (at least 16 minutes).</span></div>
+              <div className="field"><label htmlFor="rz-m">Hold stock for unpaid orders (minutes)</label><input id="rz-m" name="pendingPaymentMinutes" type="number" min={16} max={1440} className="input" defaultValue={s.payments.pendingPaymentMinutes} /><span className="hint">Unpaid online orders are cancelled and their stock released after this time (at least 16 minutes).</span></div>
               <div><Submit>Save</Submit></div>
             </AForm>
+          </Card>
+          <Card title="PayU" sub={<>Status: <Pill tone={puMode === "production" ? "good" : puMode === "test" ? "info" : "neutral"}>{puMode === "production" ? "Live keys" : puMode === "test" ? "Test mode" : "Not set up"}</Pill></>}>
+            {puEnv && <p className="hint-box" style={{ marginTop: 0 }}>PayU keys are set as server environment variables, which override the values below.</p>}
+            <AForm action={savePayu} className="fgrid">
+              <div className="field"><label htmlFor="pu-k">Merchant Key</label><input id="pu-k" name="payuKey" className="input" defaultValue={s.payments.payuKey} autoComplete="off" /></div>
+              <div className="field"><label htmlFor="pu-s">Merchant Salt (version 2) <span className="muted">({mask(s.payments.payuSalt)})</span></label><input id="pu-s" name="payuSalt" type="password" className="input" placeholder="Leave blank to keep" autoComplete="new-password" /></div>
+              <div className="field"><label htmlFor="pu-e">Environment</label>
+                <select id="pu-e" name="payuEnv" className="select" defaultValue={s.payments.payuEnv}>
+                  <option value="production">Live (real payments)</option>
+                  <option value="test">Test (no real money)</option>
+                </select></div>
+              <label className="check full"><input type="checkbox" name="clearPayu" />Remove saved PayU keys</label>
+              <div><Submit>Save PayU settings</Submit></div>
+            </AForm>
+            <AForm action={testPayu} style={{ marginTop: 12 }}><Submit className="btn sm" pendingText="Checking…">Test PayU connection</Submit></AForm>
+            <ol style={{ margin: "16px 0 0", paddingLeft: 18, display: "grid", gap: 6, fontSize: ".9rem" }}>
+              <li>PayU Dashboard → Developers → API Keys: copy the Merchant Key and the Salt (version 2). Test keys for test mode, live keys after your account is activated.</li>
+              <li>Developers → Webhooks: add <code>{SITE_URL}/api/payments/payu/webhook</code> for successful and failed payments.</li>
+              <li>Make sure your website <code>{siteOrigin}</code> is the approved website on your PayU account, or PayU will refuse the payment.</li>
+              <li>Place a ₹1 order, check it shows as paid here, then refund it from the order page.</li>
+            </ol>
           </Card>
           <Card title="Cashfree Payments" sub={<>Status: <Pill tone={cfMode === "production" ? "good" : cfMode === "sandbox" ? "info" : "neutral"}>{cfMode === "production" ? "Live keys" : cfMode === "sandbox" ? "Test mode (sandbox)" : "Not set up"}</Pill></>}>
             {cfEnv && <p className="hint-box" style={{ marginTop: 0 }}>Cashfree keys are set as server environment variables, which override the values below.</p>}

@@ -44,7 +44,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<O
       <form className="toolbar" method="get">
         {f.tab && <input type="hidden" name="tab" value={f.tab} />}
         <input className="input grow" name="q" defaultValue={f.q} placeholder="Search order number, name, email, phone or AWB" aria-label="Search orders" />
-        <select className="select" name="method" defaultValue={f.method || ""} aria-label="Payment method"><option value="">All methods</option><option value="CASHFREE">Online (Cashfree)</option><option value="RAZORPAY">Online (Razorpay)</option><option value="UPI">UPI (direct)</option><option value="COD">Cash on delivery</option></select>
+        <select className="select" name="method" defaultValue={f.method || ""} aria-label="Payment method"><option value="">All methods</option><option value="PAYU">Online (PayU)</option><option value="CASHFREE">Online (Cashfree)</option><option value="RAZORPAY">Online (Razorpay)</option><option value="UPI">UPI (direct)</option><option value="COD">Cash on delivery</option></select>
         <select className="select" name="payment" defaultValue={f.payment || ""} aria-label="Payment status"><option value="">Any payment</option>{Object.entries(PAYMENT_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         <input className="input" type="date" name="from" defaultValue={f.from} aria-label="From date" />
         <input className="input" type="date" name="to" defaultValue={f.to} aria-label="To date" />
@@ -64,7 +64,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<O
                   <td>{o.shippingAddress.name}<div className="sub">{o.shippingAddress.city}, {o.shippingAddress.state}</div></td>
                   <td className="hide-sm">{o.items.reduce((a, i) => a + i.qty, 0)}</td>
                   <td><Pill tone={STATUS_TONE[o.status]}>{STATUS_LABEL[o.status]}</Pill></td>
-                  <td className="hide-sm"><Pill tone={PAYMENT_TONE[o.paymentStatus]}>{PAYMENT_LABEL[o.paymentStatus]}</Pill><div className="sub">{o.paymentMethod === "COD" ? "COD" : o.paymentMethod === "UPI" ? "UPI" : o.paymentMethod === "CASHFREE" ? "Cashfree" : "Razorpay"}</div></td>
+                  <td className="hide-sm"><Pill tone={PAYMENT_TONE[o.paymentStatus]}>{PAYMENT_LABEL[o.paymentStatus]}</Pill><div className="sub">{o.paymentMethod === "COD" ? "COD" : o.paymentMethod === "UPI" ? "UPI" : o.paymentMethod === "PAYU" ? "PayU" : o.paymentMethod === "CASHFREE" ? "Cashfree" : "Razorpay"}</div></td>
                   <td className="r">{inr(o.total)}</td>
                 </tr>
               ))}

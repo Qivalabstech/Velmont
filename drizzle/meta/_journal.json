@@ -43,6 +43,13 @@
       "when": 1794516981957,
       "tag": "0005_shiprocket",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794597326596,
+      "tag": "0006_payu",
+      "breakpoints": true
     }
   ]
 }
